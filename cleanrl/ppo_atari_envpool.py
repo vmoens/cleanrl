@@ -22,6 +22,8 @@ class Args:
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
+    compile: bool = True
+    """whether to use compile"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
@@ -260,6 +262,8 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac
 
+    if args.compile:
+        update = torch.compile(update, mode="reduce-overhead")
 
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
@@ -359,7 +363,7 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
+        print(f"speed: {int(global_step / (time.time() - start_time)): 4.4} sps")
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
