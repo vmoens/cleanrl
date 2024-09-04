@@ -24,6 +24,8 @@ class Args:
     """seed of the experiment"""
     compile: bool = True
     """whether to use compile"""
+    cudagraphs: bool = True
+    """whether to use cudagraphs"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
     cuda: bool = True
