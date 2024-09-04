@@ -264,6 +264,8 @@ if __name__ == "__main__":
 
     if args.compile:
         update = torch.compile(update, mode="reduce-overhead")
+        if args.cudagraphs:
+            g = torch.cuda.CUDAGraph()
 
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
@@ -343,8 +345,20 @@ if __name__ == "__main__":
                 b_returns_mb_inds.copy_(b_returns[mb_inds])
                 b_values_mb_inds.copy_(b_values[mb_inds])
 
-                approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+                if iteration == 0 and epoch == 0 and start == 0 and args.cudagraphs:
+                    with torch.cuda.graph(g):
+                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                                   b_actions_mb_inds,
+                                                                                                   b_logprobs_mb_inds,
+                                                                                                   b_advantages_mb_inds,
+                                                                                                   b_returns_mb_inds,
+                                                                                                   b_values_mb_inds)
+                elif not args.cudagraphs:
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
                        b_values_mb_inds)
+                else:
+                    g.replay()
+
                 clipfracs += [clipfrac.clone()]
 
             if args.target_kl is not None and approx_kl > args.target_kl:
