@@ -348,6 +348,13 @@ if __name__ == "__main__":
                 b_values_mb_inds.copy_(b_values[mb_inds])
 
                 if iteration == 1 and epoch == 0 and start == 0 and args.cudagraphs:
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                               b_actions_mb_inds,
+                                                                                               b_logprobs_mb_inds,
+                                                                                               b_advantages_mb_inds,
+                                                                                               b_returns_mb_inds,
+                                                                                               b_values_mb_inds)
+                elif iteration == 1 and epoch == 0 and start == args.minibatch_size - 1 and args.cudagraphs:
                     with torch.cuda.graph(g):
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
                                                                                                    b_actions_mb_inds,
