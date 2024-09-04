@@ -214,6 +214,53 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(envs.reset()).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
+
+    def update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+               b_values_mb_inds):
+        _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
+        logratio = newlogprob - b_logprobs_mb_inds
+        ratio = logratio.exp()
+
+        with torch.no_grad():
+            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+            old_approx_kl = (-logratio).mean()
+            approx_kl = ((ratio - 1) - logratio).mean()
+            clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
+
+        mb_advantages = b_advantages_mb_inds
+        if args.norm_adv:
+            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+        # Policy loss
+        pg_loss1 = -mb_advantages * ratio
+        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+        # Value loss
+        newvalue = newvalue.view(-1)
+        if args.clip_vloss:
+            v_loss_unclipped = (newvalue - b_returns_mb_inds) ** 2
+            v_clipped = b_values_mb_inds + torch.clamp(
+                newvalue - b_values_mb_inds,
+                -args.clip_coef,
+                args.clip_coef,
+            )
+            v_loss_clipped = (v_clipped - b_returns_mb_inds) ** 2
+            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+            v_loss = 0.5 * v_loss_max.mean()
+        else:
+            v_loss = 0.5 * ((newvalue - b_returns_mb_inds) ** 2).mean()
+
+        entropy_loss = entropy.mean()
+        loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+        optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+        optimizer.step()
+        return approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac
+
+
     for iteration in range(1, args.num_iterations + 1):
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -264,11 +311,17 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        b_obs_mb_inds = b_obs[:args.minibatch_size].clone()
         b_logprobs = logprobs.reshape(-1)
+        b_logprobs_mb_inds = b_logprobs[:args.minibatch_size].clone()
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions_mb_inds = b_actions.long()[:args.minibatch_size].clone()
         b_advantages = advantages.reshape(-1)
+        b_advantages_mb_inds = b_advantages[:args.minibatch_size].clone()
         b_returns = returns.reshape(-1)
+        b_returns_mb_inds = b_returns[:args.minibatch_size].clone()
         b_values = values.reshape(-1)
+        b_values_mb_inds = b_values[:args.minibatch_size].clone()
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -279,47 +332,16 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
-                logratio = newlogprob - b_logprobs[mb_inds]
-                ratio = logratio.exp()
+                b_obs_mb_inds.copy_(b_obs[mb_inds])
+                b_actions_mb_inds.copy_(b_actions.long()[mb_inds])
+                b_logprobs_mb_inds.copy_(b_logprobs[mb_inds])
+                b_advantages_mb_inds.copy_(b_advantages[mb_inds])
+                b_returns_mb_inds.copy_(b_returns[mb_inds])
+                b_values_mb_inds.copy_(b_values[mb_inds])
 
-                with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                    old_approx_kl = (-logratio).mean()
-                    approx_kl = ((ratio - 1) - logratio).mean()
-                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
-
-                mb_advantages = b_advantages[mb_inds]
-                if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-                # Policy loss
-                pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-                # Value loss
-                newvalue = newvalue.view(-1)
-                if args.clip_vloss:
-                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                    v_clipped = b_values[mb_inds] + torch.clamp(
-                        newvalue - b_values[mb_inds],
-                        -args.clip_coef,
-                        args.clip_coef,
-                    )
-                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                    v_loss = 0.5 * v_loss_max.mean()
-                else:
-                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
-
-                entropy_loss = entropy.mean()
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
-
-                optimizer.zero_grad()
-                loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-                optimizer.step()
+                approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+                       b_values_mb_inds)
+                clipfracs += [clipfrac]
 
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
