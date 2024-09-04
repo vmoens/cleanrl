@@ -345,7 +345,7 @@ if __name__ == "__main__":
 
                 approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
                        b_values_mb_inds)
-                clipfracs += [clipfrac]
+                clipfracs += [clipfrac.clone()]
 
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
