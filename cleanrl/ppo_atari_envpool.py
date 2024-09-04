@@ -12,9 +12,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import tyro
-from torch.distributions.categorical import Categorical
+from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
 
+Distribution.set_default_validate_args(False)
 
 @dataclass
 class Args:
