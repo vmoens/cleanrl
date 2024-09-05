@@ -43,7 +43,7 @@ class Args:
 
     # Algorithm specific arguments
     # env_id: str = "Breakout-v5"
-    env_id: str = "ALE/Breakout-v5"
+    env_id: str = "Breakout-v5"
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
