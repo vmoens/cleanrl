@@ -41,7 +41,8 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "Breakout-v5"
+    # env_id: str = "Breakout-v5"
+    env_id: str = "ALE/Breakout-v5"
     """the id of the environment"""
     total_timesteps: int = 10000000
     """total timesteps of the experiments"""
@@ -197,7 +198,6 @@ if __name__ == "__main__":
     # )
     envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
         args.env_id,
-        env_type="gym",
         episodic_life=True,
         reward_clip=True,
         seed=args.seed,
