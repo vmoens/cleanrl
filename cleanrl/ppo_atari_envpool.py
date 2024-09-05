@@ -271,7 +271,7 @@ if __name__ == "__main__":
         loss.backward()
         nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
         optimizer.step()
-        return approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac
+        return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
 
     if args.compile:
@@ -359,37 +359,37 @@ if __name__ == "__main__":
                 b_values_mb_inds.copy_(b_values[mb_inds])
 
                 if iteration == 1 and epoch == 0 and start == 0 and args.cudagraphs:
-                    update(b_obs_mb_inds,
-                           b_actions_mb_inds,
-                           b_logprobs_mb_inds,
-                           b_advantages_mb_inds,
-                           b_returns_mb_inds,
-                           b_values_mb_inds)
-                    # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                    #                                                                            b_actions_mb_inds,
-                    #                                                                            b_logprobs_mb_inds,
-                    #                                                                            b_advantages_mb_inds,
-                    #                                                                            b_returns_mb_inds,
-                    #                                                                            b_values_mb_inds)
+                    # update(b_obs_mb_inds,
+                    #        b_actions_mb_inds,
+                    #        b_logprobs_mb_inds,
+                    #        b_advantages_mb_inds,
+                    #        b_returns_mb_inds,
+                    #        b_values_mb_inds)
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                               b_actions_mb_inds,
+                                                                                               b_logprobs_mb_inds,
+                                                                                               b_advantages_mb_inds,
+                                                                                               b_returns_mb_inds,
+                                                                                               b_values_mb_inds)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
                     with torch.cuda.graph(g):
-                        update(b_obs_mb_inds,
-                               b_actions_mb_inds,
-                               b_logprobs_mb_inds,
-                               b_advantages_mb_inds,
-                               b_returns_mb_inds,
-                               b_values_mb_inds)
-                        # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                        #                                                                            b_actions_mb_inds,
-                        #                                                                            b_logprobs_mb_inds,
-                        #                                                                            b_advantages_mb_inds,
-                        #                                                                            b_returns_mb_inds,
-                        #                                                                            b_values_mb_inds)
+                        # update(b_obs_mb_inds,
+                        #        b_actions_mb_inds,
+                        #        b_logprobs_mb_inds,
+                        #        b_advantages_mb_inds,
+                        #        b_returns_mb_inds,
+                        #        b_values_mb_inds)
+                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                                   b_actions_mb_inds,
+                                                                                                   b_logprobs_mb_inds,
+                                                                                                   b_advantages_mb_inds,
+                                                                                                   b_returns_mb_inds,
+                                                                                                   b_values_mb_inds)
                 elif not args.cudagraphs:
-                    update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds,
-                           b_returns_mb_inds, b_values_mb_inds)
-                    # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
-                    #    b_values_mb_inds)
+                    # update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds,
+                    #        b_returns_mb_inds, b_values_mb_inds)
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+                       b_values_mb_inds)
                 else:
                     g.replay()
                 # TODO
