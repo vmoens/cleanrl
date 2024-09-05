@@ -275,8 +275,11 @@ if __name__ == "__main__":
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
 
-    if args.compile:
+    policy = agent_inference.get_action_and_value
+    if args.compile or args.cudagraphs:
+        args.compile = True
         update = torch.compile(update)
+        policy = torch.compile(policy)
         if args.cudagraphs:
             g = torch.cuda.CUDAGraph()
 
@@ -315,8 +318,9 @@ if __name__ == "__main__":
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
-                    # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
                     avg_returns.append(info["r"][idx])
+                    # TODO
+                    # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
                     # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
