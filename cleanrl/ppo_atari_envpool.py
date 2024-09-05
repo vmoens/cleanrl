@@ -392,29 +392,29 @@ if __name__ == "__main__":
                        b_values_mb_inds)
                 else:
                     g.replay()
-                # TODO
-                # clipfracs += [clipfrac.clone()]
+
+                clipfracs += [clipfrac.clone()]
 
             # TODO
             # if args.target_kl is not None and approx_kl > args.target_kl:
             #     break
 
         # TODO
-        # y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        # var_y = np.var(y_true)
-        # explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-        #
-        # # TRY NOT TO MODIFY: record rewards for plotting purposes
-        # writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        # writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        # writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        # writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        # writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        # writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
-        # writer.add_scalar("losses/explained_variance", explained_var, global_step)
+        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+        var_y = np.var(y_true)
+        explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
+
+        # TRY NOT TO MODIFY: record rewards for plotting purposes
+        writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
+        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+        writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
+        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+        writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
+        writer.add_scalar("losses/explained_variance", explained_var, global_step)
         print(f"speed: {global_step / (time.time() - start_time): 4.4f} sps")
-        # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
     writer.close()
