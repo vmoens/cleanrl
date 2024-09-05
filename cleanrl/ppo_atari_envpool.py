@@ -197,10 +197,7 @@ if __name__ == "__main__":
     #     seed=args.seed,
     # )
     envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
-        args.env_id,
-        episodic_life=True,
-        reward_clip=True,
-        seed=args.seed,
+        args.env_id
     )] * args.num_envs)
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
