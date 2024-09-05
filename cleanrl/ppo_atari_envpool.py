@@ -18,6 +18,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 Distribution.set_default_validate_args(False)
 
+
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -207,6 +208,7 @@ if __name__ == "__main__":
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs, device=device)
+    # TODO
     agent_inference = Agent(envs, device=device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -271,17 +273,19 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac
 
+
     if args.compile:
         update = torch.compile(update)
         if args.cudagraphs:
             g = torch.cuda.CUDAGraph()
 
     for iteration in range(1, args.num_iterations + 1):
+        # TODO
         # Annealing the rate if instructed to do so.
-        if args.anneal_lr:
-            frac = 1.0 - (iteration - 1.0) / args.num_iterations
-            lrnow = frac * args.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
+        # if args.anneal_lr:
+        #     frac = 1.0 - (iteration - 1.0) / args.num_iterations
+        #     lrnow = frac * args.learning_rate
+        #     optimizer.param_groups[0]["lr"] = lrnow
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
@@ -355,31 +359,47 @@ if __name__ == "__main__":
                 b_values_mb_inds.copy_(b_values[mb_inds])
 
                 if iteration == 1 and epoch == 0 and start == 0 and args.cudagraphs:
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                               b_actions_mb_inds,
-                                                                                               b_logprobs_mb_inds,
-                                                                                               b_advantages_mb_inds,
-                                                                                               b_returns_mb_inds,
-                                                                                               b_values_mb_inds)
+                    update(b_obs_mb_inds,
+                           b_actions_mb_inds,
+                           b_logprobs_mb_inds,
+                           b_advantages_mb_inds,
+                           b_returns_mb_inds,
+                           b_values_mb_inds)
+                    # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                    #                                                                            b_actions_mb_inds,
+                    #                                                                            b_logprobs_mb_inds,
+                    #                                                                            b_advantages_mb_inds,
+                    #                                                                            b_returns_mb_inds,
+                    #                                                                            b_values_mb_inds)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
                     with torch.cuda.graph(g):
-                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                                   b_actions_mb_inds,
-                                                                                                   b_logprobs_mb_inds,
-                                                                                                   b_advantages_mb_inds,
-                                                                                                   b_returns_mb_inds,
-                                                                                                   b_values_mb_inds)
+                        update(b_obs_mb_inds,
+                               b_actions_mb_inds,
+                               b_logprobs_mb_inds,
+                               b_advantages_mb_inds,
+                               b_returns_mb_inds,
+                               b_values_mb_inds)
+                        # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                        #                                                                            b_actions_mb_inds,
+                        #                                                                            b_logprobs_mb_inds,
+                        #                                                                            b_advantages_mb_inds,
+                        #                                                                            b_returns_mb_inds,
+                        #                                                                            b_values_mb_inds)
                 elif not args.cudagraphs:
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
-                       b_values_mb_inds)
+                    update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds,
+                           b_returns_mb_inds, b_values_mb_inds)
+                    # approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+                    #    b_values_mb_inds)
                 else:
                     g.replay()
+                # TODO
+                # clipfracs += [clipfrac.clone()]
 
-                clipfracs += [clipfrac.clone()]
+            # TODO
+            # if args.target_kl is not None and approx_kl > args.target_kl:
+            #     break
 
-            if args.target_kl is not None and approx_kl > args.target_kl:
-                break
-
+        # TODO
         # y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
         # var_y = np.var(y_true)
         # explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
