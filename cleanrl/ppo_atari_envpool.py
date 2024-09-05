@@ -160,7 +160,8 @@ class Agent(nn.Module):
 if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
+    args.minibatch_size = args.batch_size // args.num_minibatches
+    args.batch_size = args.num_minibatches * args.batch_size
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
@@ -333,7 +334,7 @@ if __name__ == "__main__":
         b_obs_mb_inds = b_obs[:args.minibatch_size].clone()
         b_logprobs = logprobs.reshape(-1)
         b_logprobs_mb_inds = b_logprobs[:args.minibatch_size].clone()
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions = actions.long().reshape((-1,) + envs.single_action_space.shape)
         b_actions_mb_inds = b_actions.long()[:args.minibatch_size].clone()
         b_advantages = advantages.reshape(-1)
         b_advantages_mb_inds = b_advantages[:args.minibatch_size].clone()
@@ -351,7 +352,7 @@ if __name__ == "__main__":
                 mb_inds = b_inds[start:end]
 
                 b_obs_mb_inds.copy_(b_obs[mb_inds])
-                b_actions_mb_inds.copy_(b_actions.long()[mb_inds])
+                b_actions_mb_inds.copy_(b_actions[mb_inds])
                 b_logprobs_mb_inds.copy_(b_logprobs[mb_inds])
                 b_advantages_mb_inds.copy_(b_advantages[mb_inds])
                 b_returns_mb_inds.copy_(b_returns[mb_inds])
@@ -387,8 +388,12 @@ if __name__ == "__main__":
                 elif not args.cudagraphs:
                     # update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds,
                     #        b_returns_mb_inds, b_values_mb_inds)
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
-                       b_values_mb_inds)
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                               b_actions_mb_inds,
+                                                                                               b_logprobs_mb_inds,
+                                                                                               b_advantages_mb_inds,
+                                                                                               b_returns_mb_inds,
+                                                                                               b_values_mb_inds)
                 else:
                     g.replay()
 
