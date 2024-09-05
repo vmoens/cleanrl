@@ -88,6 +88,7 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    measure_burnin: int = 3
 
 class Network(nn.Module):
     @nn.compact
@@ -402,7 +403,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
-    start_time = time.time()
+    start_time = None
     next_obs = envs.reset()
     next_done = np.zeros(args.num_envs)
 
@@ -418,6 +419,9 @@ if __name__ == "__main__":
         return agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step
 
     for iteration in range(1, args.num_iterations + 1):
+        if iteration == args.measure_burnin:
+            start_time = time.time()
+            global_step_init = global_step
         iteration_time_start = time.time()
         agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step = rollout(
             agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step
@@ -442,8 +446,9 @@ if __name__ == "__main__":
         writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/loss", loss.item(), global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+        if start_time is not None:
+            print("SPS:", int((global_step - global_step_init) / (time.time() - start_time)))
+            writer.add_scalar("charts/SPS", int((global_step - global_step_init) / (time.time() - start_time)), global_step)
         writer.add_scalar(
             "charts/SPS_update", int(args.num_envs * args.num_steps / (time.time() - iteration_time_start)), global_step
         )
