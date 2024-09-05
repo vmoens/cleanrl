@@ -280,8 +280,8 @@ if __name__ == "__main__":
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        policy = torch.compile(policy)
-        get_value = torch.compile(get_value)
+        policy = torch.compile(policy, mode="reduce-overhead")
+        get_value = torch.compile(get_value, mode="reduce-overhead")
         if args.cudagraphs:
             # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
