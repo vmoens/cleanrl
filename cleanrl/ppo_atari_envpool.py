@@ -161,7 +161,7 @@ if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = args.batch_size // args.num_minibatches
-    args.batch_size = args.num_minibatches * args.batch_size
+    args.batch_size = args.num_minibatches * args.minibatch_size
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     if args.track:
