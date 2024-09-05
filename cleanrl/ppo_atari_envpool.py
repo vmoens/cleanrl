@@ -280,6 +280,13 @@ if __name__ == "__main__":
         if args.cudagraphs:
             g = torch.cuda.CUDAGraph()
 
+    b_obs_mb_inds = None
+    b_logprobs_mb_inds = None
+    b_actions_mb_inds = None
+    b_advantages_mb_inds = None
+    b_returns_mb_inds = None
+    b_values_mb_inds = None
+
     for iteration in range(1, args.num_iterations + 1):
         # TODO
         # Annealing the rate if instructed to do so.
@@ -331,17 +338,18 @@ if __name__ == "__main__":
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
-        b_obs_mb_inds = b_obs[:args.minibatch_size].clone()
         b_logprobs = logprobs.reshape(-1)
-        b_logprobs_mb_inds = b_logprobs[:args.minibatch_size].clone()
         b_actions = actions.long().reshape((-1,) + envs.single_action_space.shape)
-        b_actions_mb_inds = b_actions.long()[:args.minibatch_size].clone()
         b_advantages = advantages.reshape(-1)
-        b_advantages_mb_inds = b_advantages[:args.minibatch_size].clone()
         b_returns = returns.reshape(-1)
-        b_returns_mb_inds = b_returns[:args.minibatch_size].clone()
         b_values = values.reshape(-1)
-        b_values_mb_inds = b_values[:args.minibatch_size].clone()
+        if b_obs_mb_inds is None:
+            b_obs_mb_inds = b_obs[:args.minibatch_size].clone()
+            b_logprobs_mb_inds = b_logprobs[:args.minibatch_size].clone()
+            b_actions_mb_inds = b_actions.long()[:args.minibatch_size].clone()
+            b_advantages_mb_inds = b_advantages[:args.minibatch_size].clone()
+            b_returns_mb_inds = b_returns[:args.minibatch_size].clone()
+            b_values_mb_inds = b_values[:args.minibatch_size].clone()
 
         # Optimizing the policy and value network
         clipfracs = []
