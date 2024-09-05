@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import tyro
+import tensordict
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
 
@@ -209,8 +210,10 @@ if __name__ == "__main__":
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs, device=device)
-    # TODO
+    # Make a version of agent with detached params
     agent_inference = Agent(envs, device=device)
+    tensordict.TensorDict.from_module(agent).detach().to_module(agent_inference)
+
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -301,9 +304,9 @@ if __name__ == "__main__":
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
-            with torch.no_grad():
-                action, logprob, _, value = agent_inference.get_action_and_value(next_obs)
-                values[step] = value.flatten()
+            action, logprob, _, value = agent_inference.get_action_and_value(next_obs)
+            values[step] = value.flatten()
+
             actions[step] = action
             logprobs[step] = logprob
 
@@ -321,20 +324,19 @@ if __name__ == "__main__":
                     writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         # bootstrap value if not done
-        with torch.no_grad():
-            next_value = agent_inference.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros_like(rewards, device=device)
-            lastgaelam = 0
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
-                    nextnonterminal = (~next_done).float()
-                    nextvalues = next_value
-                else:
-                    nextnonterminal = (~dones[t + 1]).float()
-                    nextvalues = values[t + 1]
-                delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-            returns = advantages + values
+        next_value = agent_inference.get_value(next_obs).reshape(1, -1)
+        advantages = torch.zeros_like(rewards, device=device)
+        lastgaelam = 0
+        for t in reversed(range(args.num_steps)):
+            if t == args.num_steps - 1:
+                nextnonterminal = (~next_done).float()
+                nextvalues = next_value
+            else:
+                nextnonterminal = (~dones[t + 1]).float()
+                nextvalues = values[t + 1]
+            delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
+            advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
+        returns = advantages + values
 
         # flatten the batch
         b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
