@@ -127,21 +127,21 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs):
+    def __init__(self, envs, device=None):
         super().__init__()
         self.network = nn.Sequential(
-            layer_init(nn.Conv2d(4, 32, 8, stride=4)),
+            layer_init(nn.Conv2d(4, 32, 8, stride=4, device=device)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(32, 64, 4, stride=2)),
+            layer_init(nn.Conv2d(32, 64, 4, stride=2, device=device)),
             nn.ReLU(),
-            layer_init(nn.Conv2d(64, 64, 3, stride=1)),
+            layer_init(nn.Conv2d(64, 64, 3, stride=1, device=device)),
             nn.ReLU(),
             nn.Flatten(),
-            layer_init(nn.Linear(64 * 7 * 7, 512)),
+            layer_init(nn.Linear(64 * 7 * 7, 512, device=device)),
             nn.ReLU(),
         )
-        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n), std=0.01)
-        self.critic = layer_init(nn.Linear(512, 1), std=1)
+        self.actor = layer_init(nn.Linear(512, envs.single_action_space.n, device=device), std=0.01)
+        self.critic = layer_init(nn.Linear(512, 1, device=device), std=1)
 
     def get_value(self, x):
         return self.critic(self.network(x / 255.0))
