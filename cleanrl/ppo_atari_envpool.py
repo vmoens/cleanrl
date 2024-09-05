@@ -276,12 +276,14 @@ if __name__ == "__main__":
 
 
     policy = agent_inference.get_action_and_value
+    get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
         policy = torch.compile(policy)
+        get_value = torch.compile(get_value)
         if args.cudagraphs:
-            graph_policy = torch.cuda.CUDAGraph()
+            # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
 
     b_obs_mb_inds = None
@@ -327,7 +329,7 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         # bootstrap value if not done
-        next_value = agent_inference.get_value(next_obs).reshape(1, -1)
+        next_value = get_value(next_obs).reshape(1, -1)
         advantages = torch.zeros_like(rewards, device=device)
         lastgaelam = 0
         for t in reversed(range(args.num_steps)):
