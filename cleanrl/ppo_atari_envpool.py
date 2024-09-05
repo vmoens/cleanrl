@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 
 import envpool
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -187,41 +187,49 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = envpool.make(
+    # envs = envpool.make(
+    #     args.env_id,
+    #     env_type="gym",
+    #     num_envs=args.num_envs,
+    #     episodic_life=True,
+    #     reward_clip=True,
+    #     seed=args.seed,
+    # )
+    envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
         args.env_id,
         env_type="gym",
-        num_envs=args.num_envs,
         episodic_life=True,
         reward_clip=True,
         seed=args.seed,
-    )
+    )]*args.num_envs)
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space
     envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
-    agent = Agent(envs).to(device)
+    agent = Agent(envs, device=device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape, device=device)
+    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape, device=device)
+    logprobs = torch.zeros((args.num_steps, args.num_envs), device=device)
+    rewards = torch.zeros((args.num_steps, args.num_envs), device=device)
+    dones = torch.zeros((args.num_steps, args.num_envs), device=device)
+    values = torch.zeros((args.num_steps, args.num_envs), device=device)
     avg_returns = deque(maxlen=20)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs = torch.Tensor(envs.reset()).to(device)
-    next_done = torch.zeros(args.num_envs).to(device)
+    next_obs = torch.Tensor(envs.reset(), device=device)
+    next_done = torch.zeros(args.num_envs, device=device)
 
 
     def update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
                b_values_mb_inds):
+        optimizer.zero_grad()
         _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
         logratio = newlogprob - b_logprobs_mb_inds
         ratio = logratio.exp()
@@ -259,14 +267,13 @@ if __name__ == "__main__":
         entropy_loss = entropy.mean()
         loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
-        optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
         optimizer.step()
         return approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac
 
     if args.compile:
-        update = torch.compile(update, mode="reduce-overhead")
+        update = torch.compile(update)
         if args.cudagraphs:
             g = torch.cuda.CUDAGraph()
 
@@ -291,8 +298,8 @@ if __name__ == "__main__":
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+            rewards[step] = torch.tensor(reward, device=device).view(-1)
+            next_obs, next_done = torch.tensor(next_obs, device=device), torch.tensor(next_done, device=device)
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
@@ -305,7 +312,7 @@ if __name__ == "__main__":
         # bootstrap value if not done
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
-            advantages = torch.zeros_like(rewards).to(device)
+            advantages = torch.zeros_like(rewards, device=device)
             lastgaelam = 0
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:
