@@ -6,7 +6,8 @@ from collections import deque
 from dataclasses import dataclass
 
 import envpool
-import gymnasium as gym
+# import gymnasium as gym
+import gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -188,17 +189,17 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    # envs = envpool.make(
-    #     args.env_id,
-    #     env_type="gym",
-    #     num_envs=args.num_envs,
-    #     episodic_life=True,
-    #     reward_clip=True,
-    #     seed=args.seed,
-    # )
-    envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
-        args.env_id
-    )] * args.num_envs)
+    envs = envpool.make(
+        args.env_id,
+        env_type="gym",
+        num_envs=args.num_envs,
+        episodic_life=True,
+        reward_clip=True,
+        seed=args.seed,
+    )
+    # envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
+    #     args.env_id
+    # )] * args.num_envs)
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space
