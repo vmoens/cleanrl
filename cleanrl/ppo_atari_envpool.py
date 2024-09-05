@@ -281,7 +281,8 @@ if __name__ == "__main__":
         update = torch.compile(update)
         policy = torch.compile(policy)
         if args.cudagraphs:
-            g = torch.cuda.CUDAGraph()
+            graph_policy = torch.cuda.CUDAGraph()
+            graph_update = torch.cuda.CUDAGraph()
 
     b_obs_mb_inds = None
     b_logprobs_mb_inds = None
@@ -305,7 +306,7 @@ if __name__ == "__main__":
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
-            action, logprob, _, value = agent_inference.get_action_and_value(next_obs)
+            action, logprob, _, value = policy(next_obs)
             values[step] = value.flatten()
 
             actions[step] = action
@@ -384,7 +385,7 @@ if __name__ == "__main__":
                                                                                                b_returns_mb_inds,
                                                                                                b_values_mb_inds)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                    with torch.cuda.graph(g):
+                    with torch.cuda.graph(graph_update):
                         # update(b_obs_mb_inds,
                         #        b_actions_mb_inds,
                         #        b_logprobs_mb_inds,
@@ -407,7 +408,7 @@ if __name__ == "__main__":
                                                                                                b_returns_mb_inds,
                                                                                                b_values_mb_inds)
                 else:
-                    g.replay()
+                    graph_update.replay()
 
                 # TODO
                 # clipfracs += [clipfrac.clone()]
