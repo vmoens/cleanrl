@@ -27,9 +27,9 @@ class Args:
     """the name of this experiment"""
     seed: int = 1
     """seed of the experiment"""
-    compile: bool = True
+    compile: bool = False
     """whether to use compile"""
-    cudagraphs: bool = True
+    cudagraphs: bool = False
     """whether to use cudagraphs"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
@@ -221,6 +221,7 @@ if __name__ == "__main__":
     rewards = torch.zeros((args.num_steps, args.num_envs), device=device)
     dones = torch.zeros((args.num_steps, args.num_envs), dtype=torch.bool, device=device)
     values = torch.zeros((args.num_steps, args.num_envs), device=device)
+    advantages = torch.zeros_like(rewards, device=device)
     avg_returns = deque(maxlen=20)
 
     # TRY NOT TO MODIFY: start the game
@@ -330,7 +331,6 @@ if __name__ == "__main__":
 
         # bootstrap value if not done
         next_value = get_value(next_obs).reshape(1, -1)
-        advantages = torch.zeros_like(rewards, device=device)
         lastgaelam = 0
         for t in reversed(range(args.num_steps)):
             if t == args.num_steps - 1:
