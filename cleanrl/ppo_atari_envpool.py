@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import tqdm
 import tyro
 import tensordict
 from torch.distributions.categorical import Categorical, Distribution
@@ -200,9 +201,6 @@ if __name__ == "__main__":
         reward_clip=True,
         seed=args.seed,
     )
-    # envs = gym.vector.AsyncVectorEnv([lambda: gym.make(
-    #     args.env_id
-    # )] * args.num_envs)
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space
@@ -230,7 +228,6 @@ if __name__ == "__main__":
     start_time = time.time()
     next_obs = torch.tensor(envs.reset(), device=device)
     next_done = torch.zeros(args.num_envs, device=device)
-
 
     def update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
                b_values_mb_inds):
@@ -290,7 +287,8 @@ if __name__ == "__main__":
     b_returns_mb_inds = None
     b_values_mb_inds = None
 
-    for iteration in range(1, args.num_iterations + 1):
+    pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
+    for iteration in pbar:
         # TODO
         # Annealing the rate if instructed to do so.
         # if args.anneal_lr:
@@ -317,11 +315,11 @@ if __name__ == "__main__":
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
-                    print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
+                    # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
                     avg_returns.append(info["r"][idx])
-                    writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
-                    writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-                    writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
+                    # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
+                    # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
+                    # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         # bootstrap value if not done
         next_value = agent_inference.get_value(next_obs).reshape(1, -1)
@@ -429,7 +427,7 @@ if __name__ == "__main__":
         # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         # writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
         # writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print(f"speed: {global_step / (time.time() - start_time): 4.4f} sps")
+        pbar.set_description(f"speed: {global_step / (time.time() - start_time): 4.4f} sps")
         # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
