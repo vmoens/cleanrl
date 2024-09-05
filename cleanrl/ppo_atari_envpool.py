@@ -89,6 +89,8 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    measure_burnin: int = 3
+    """Number of burn-in iterations for speed measure."""
 
 class RecordEpisodeStatistics(gym.Wrapper):
     def __init__(self, env, deque_size=100):
@@ -226,7 +228,6 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
-    start_time = time.time()
     next_obs = torch.tensor(envs.reset(), device=device)
     next_done = torch.zeros(args.num_envs, device=device)
 
@@ -295,7 +296,11 @@ if __name__ == "__main__":
     b_values_mb_inds = None
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
+    global_step_burnin = None
     for iteration in pbar:
+        if iteration == args.measure_burnin:
+            global_step_burnin = global_step
+            start_time = time.time()
         # TODO
         # Annealing the rate if instructed to do so.
         # if args.anneal_lr:
@@ -434,7 +439,8 @@ if __name__ == "__main__":
         # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         # writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
         # writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        pbar.set_description(f"speed: {global_step / (time.time() - start_time): 4.4f} sps")
+        if global_step_burnin is not None:
+            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
         # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
