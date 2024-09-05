@@ -221,7 +221,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs = torch.Tensor(envs.reset(), device=device)
+    next_obs = torch.tensor(envs.reset(), device=device)
     next_done = torch.zeros(args.num_envs, device=device)
 
 
