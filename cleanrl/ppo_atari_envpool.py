@@ -214,7 +214,7 @@ if __name__ == "__main__":
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape, device=device)
     logprobs = torch.zeros((args.num_steps, args.num_envs), device=device)
     rewards = torch.zeros((args.num_steps, args.num_envs), device=device)
-    dones = torch.zeros((args.num_steps, args.num_envs), device=device)
+    dones = torch.zeros((args.num_steps, args.num_envs), dtype=torch.bool, device=device)
     values = torch.zeros((args.num_steps, args.num_envs), device=device)
     avg_returns = deque(maxlen=20)
 
