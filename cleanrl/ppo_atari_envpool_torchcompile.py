@@ -228,7 +228,7 @@ if __name__ == "__main__":
         dones: torch.Tensor
         vals: torch.Tensor
         advantages: torch.Tensor
-        returns: torch.Tensor | None = None
+        returns: torch.Tensor
 
 
     container = Transitions(
@@ -239,6 +239,7 @@ if __name__ == "__main__":
         dones=torch.zeros((), dtype=torch.bool),
         vals=torch.zeros(()),
         advantages=torch.zeros(()),
+        returns=torch.zeros(()),
         device=device,
     ).expand(args.num_steps, args.num_envs).clone()
     container_flat = container.view(-1)
@@ -304,7 +305,7 @@ if __name__ == "__main__":
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
 
-    def gae(next_obs, next_done):
+    def gae(next_obs, next_done, container):
         # bootstrap value if not done
         next_value = get_value(next_obs).reshape(1, -1)
         lastgaelam = 0
@@ -317,7 +318,7 @@ if __name__ == "__main__":
                 nextvalues = container.vals[t + 1]
             delta = container.rewards[t] + args.gamma * nextvalues * nextnonterminal - container.vals[t]
             container.advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-        container.returns = container.advantages + container.vals
+        container.returns.copy_(container.advantages + container.vals)
 
 
     def rollout(global_step, next_obs, next_done):
