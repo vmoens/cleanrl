@@ -17,6 +17,7 @@ import tqdm
 import tyro
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
+from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 
@@ -383,8 +384,10 @@ if __name__ == "__main__":
         #     optimizer.param_groups[0]["lr"] = lrnow
 
         torch.compiler.cudagraph_mark_step_begin()
-        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        container_flat = container.view(-1)
+        with timeit("rollout"):
+            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        with timeit("view"):
+            container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
@@ -395,21 +398,23 @@ if __name__ == "__main__":
             for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
                 end = start + args.minibatch_size
 
-                if container_local is None:
-                    container_local = c.clone()
-                else:
-                    container_local.update_(c)
+                with timeit("update tc"):
+                    if container_local is None:
+                       container_local = c.clone()
+                    else:
+                        container_local.update_(c)
 
-                if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
-                    # Run a first time without capture
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                    # Run a second time with capture
-                    with torch.cuda.graph(graph_update):
+                with timeit("update"):
+                    if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
+                        # Run a first time without capture
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                else:
-                    # Run captured graph
-                    graph_update.replay()
+                    elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
+                        # Run a second time with capture
+                        with torch.cuda.graph(graph_update):
+                            approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
+                    else:
+                        # Run captured graph
+                        graph_update.replay()
 
                 # TODO
                 # clipfracs += [clipfrac.clone()]
@@ -435,6 +440,7 @@ if __name__ == "__main__":
         # writer.add_scalar("losses/explained_variance", explained_var, global_step)
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
+            timeit.print()
         # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
