@@ -104,6 +104,7 @@ class CudaGraphCompiledModule:
         if hasattr(module, "out_keys"):
             self.out_keys = module.out_keys
 
+    @torch.compile
     @tensordict.nn.dispatch(auto_batch_size=False)
     def __call__(self, tensordict):
         if self.counter < self.warmup:
@@ -111,11 +112,13 @@ class CudaGraphCompiledModule:
             return out
         elif self.counter == self.warmup:
             self.graph = torch.cuda.CUDAGraph()
+            self._tensordict = tensordict
             with torch.cuda.graph(self.graph):
                 out = self.module(tensordict)
             self._out = out
             return out
         else:
+            self._tensordict.update_(tensordict)
             self.graph.replay()
             return self._out.clone() if self._out is not None else None
 
@@ -352,7 +355,7 @@ if __name__ == "__main__":
 
             ts.append(
                 tensordict.TensorDict(
-                    obs=obs.clone(),
+                    obs=obs,
                     dones=done,
                     vals=value.flatten(),
                     actions=action,
