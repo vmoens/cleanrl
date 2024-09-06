@@ -369,7 +369,7 @@ if __name__ == "__main__":
 
                 with timeit("3. flip"):
                     if container_local is None:
-                        container_local = container_flat[b_inds].clone()
+                        container_local = container_flat[b].clone()
                         b_obs_mb_inds = container_local["obs"]
                         b_actions_mb_inds = container_local["actions"]
                         b_logprobs_mb_inds = container_local["logprobs"]
@@ -377,7 +377,7 @@ if __name__ == "__main__":
                         b_returns_mb_inds = container_local["returns"]
                         b_values_mb_inds = container_local["vals"]
                     else:
-                        container_local.update_(container_flat[b_inds])
+                        container_local.update_(container_flat[b])
 
                 with timeit("4. update"):
                     if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
