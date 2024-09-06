@@ -312,8 +312,8 @@ if __name__ == "__main__":
         container.returns = container.advantages + container.vals
         return container
 
-    if args.compile:
-        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+    # if args.compile:
+    #     gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
@@ -352,7 +352,6 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
-        # torch.stack(ts, 0, out=container)
         container = torch.stack(ts, 0)
         container = gae(next_obs, next_done, container)
         return global_step, next_obs, next_done, container
@@ -399,7 +398,6 @@ if __name__ == "__main__":
                     container_local = c.clone()
                 else:
                     container_local.update_(c)
-
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
