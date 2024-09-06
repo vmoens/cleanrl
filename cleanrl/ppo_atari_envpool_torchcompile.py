@@ -317,10 +317,10 @@ if __name__ == "__main__":
                 )
             )
 
-            obs = next_obs.to(device, non_blocking=True)
+            obs = next_obs = next_obs.to(device, non_blocking=True)
 
         container = torch.stack(ts, 0).to(device)
-        return next_obs, next_done, container
+        return next_obs, next_done.to(device, non_blocking=True), container
 
     if args.compile:
         rollout = torch.compile(rollout)
