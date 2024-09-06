@@ -355,7 +355,6 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         container = torch.stack(ts, 0)
-        container = gae(next_obs, next_done, container)
         return global_step, next_obs, next_done, container
 
 
@@ -387,6 +386,8 @@ if __name__ == "__main__":
         torch.compiler.cudagraph_mark_step_begin()
         with timeit("rollout") if global_step_burnin is not None else contextlib.nullcontext():
             global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        with timeit("gae") if global_step_burnin is not None else contextlib.nullcontext():
+            container = gae(next_obs, next_done, container)
         with timeit("view") if global_step_burnin is not None else contextlib.nullcontext():
             container_flat = container.view(-1)
 
