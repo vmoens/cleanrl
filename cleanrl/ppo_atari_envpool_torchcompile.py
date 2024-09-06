@@ -310,7 +310,7 @@ if __name__ == "__main__":
         next_value = get_value(next_obs).reshape(-1)
         lastgaelam = 0
         advantages = []
-        for t in range(args.num_steps, -1, -1):
+        for t in range(args.num_steps-1, -1, -1):
             if t == args.num_steps - 1:
                 nextnonterminal = (~next_done).float()
                 nextvalues = next_value
