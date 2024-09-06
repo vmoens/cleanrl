@@ -310,7 +310,7 @@ if __name__ == "__main__":
         next_value = get_value(next_obs).reshape(-1)
         lastgaelam = 0
         advantages = []
-        for t in reversed(range(args.num_steps)):
+        for t in range(args.num_steps, -1, -1):
             if t == args.num_steps - 1:
                 nextnonterminal = (~next_done).float()
                 nextvalues = next_value
@@ -323,6 +323,8 @@ if __name__ == "__main__":
         container.advantages = torch.stack(list(reversed(advantages)))
         container.returns = container.advantages + container.vals
 
+    if args.compile:
+        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
@@ -348,8 +350,8 @@ if __name__ == "__main__":
                 )
             )
 
-            next_obs = torch.tensor(next_obs, dtype=torch.float).to(device=device, non_blocking=True)
-            next_done = torch.tensor(next_done, dtype=torch.bool).to(device=device, non_blocking=True)
+            next_obs = torch.tensor(next_obs, dtype=torch.float, device=device)
+            next_done = torch.tensor(next_done, dtype=torch.bool, device=device)
             obs, done = next_obs, next_done
 
             for idx, d in enumerate(next_done):
