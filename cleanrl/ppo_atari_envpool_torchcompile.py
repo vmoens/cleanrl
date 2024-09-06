@@ -318,7 +318,7 @@ if __name__ == "__main__":
                 )
             )
 
-            next_obs = next_obs.to(non_blocking=True)
+            next_obs = next_obs.to(device, non_blocking=True)
             next_done = next_done.to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
