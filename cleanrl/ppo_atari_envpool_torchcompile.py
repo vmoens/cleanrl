@@ -109,6 +109,7 @@ class CudaGraphCompiledModule:
     def __call__(self, tensordict):
         if self.counter < self.warmup:
             out = self.module(tensordict)
+            self.counter += 1
             return out
         elif self.counter == self.warmup:
             self.graph = torch.cuda.CUDAGraph()
@@ -116,6 +117,7 @@ class CudaGraphCompiledModule:
             with torch.cuda.graph(self.graph):
                 out = self.module(tensordict)
             self._out = out
+            self.counter += 1
             return out
         else:
             self._tensordict.update_(tensordict)
