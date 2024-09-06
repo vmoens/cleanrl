@@ -341,9 +341,9 @@ if __name__ == "__main__":
                 rewards=reward.reshape(-1),
                 device=device
             ))
-            obs, done = next_obs, next_done
 
             next_obs, next_done = torch.tensor(next_obs).to(device=device, non_blocking=True), torch.tensor(next_done).to(device=device, non_blocking=True)
+            obs, done = next_obs, next_done
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
