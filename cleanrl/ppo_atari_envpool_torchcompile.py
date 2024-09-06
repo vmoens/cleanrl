@@ -407,7 +407,7 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                container_local.update_(container[mb_inds])
+                container_local.update_(container_flat[mb_inds])
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
