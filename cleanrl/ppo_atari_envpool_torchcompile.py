@@ -307,7 +307,7 @@ if __name__ == "__main__":
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
     # Define networks
-    policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "_", "value"])
+    policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
     get_value = agent_inference.get_value
 
     # Compile policy
