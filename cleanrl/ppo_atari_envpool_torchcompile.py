@@ -379,29 +379,32 @@ if __name__ == "__main__":
                     else:
                         container_local.update_(container_flat[b_inds])
 
-                if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
-                    # Run a first time without capture
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                               b_actions_mb_inds,
-                                                                                               b_logprobs_mb_inds,
-                                                                                               b_advantages_mb_inds,
-                                                                                               b_returns_mb_inds,
-                                                                                               b_values_mb_inds)
-                elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                    # Run a second time with capture
-                    with torch.cuda.graph(graph_update):
+                with timeit("4. update"):
+                    if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
+                        # Run a first time without capture
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
                                                                                                    b_actions_mb_inds,
                                                                                                    b_logprobs_mb_inds,
                                                                                                    b_advantages_mb_inds,
                                                                                                    b_returns_mb_inds,
                                                                                                    b_values_mb_inds)
-                else:
-                    # Run captured graph
-                    graph_update.replay()
+                    elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
+                        # Run a second time with capture
+                        with torch.cuda.graph(graph_update):
+                            approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                                       b_actions_mb_inds,
+                                                                                                       b_logprobs_mb_inds,
+                                                                                                       b_advantages_mb_inds,
+                                                                                                       b_returns_mb_inds,
+                                                                                                       b_values_mb_inds)
+                    else:
+                        # Run captured graph
+                        graph_update.replay()
 
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
+            if iteration % 10 == 0:
+                timeit.print()
 
     envs.close()
     writer.close()
