@@ -231,19 +231,7 @@ if __name__ == "__main__":
         returns: torch.Tensor=None
 
 
-    container = Transitions(
-        obs=torch.zeros(envs.single_observation_space.shape),
-        actions=torch.zeros(envs.single_action_space.shape),
-        logprobs=torch.zeros(()),
-        rewards=torch.zeros(()),
-        dones=torch.zeros((), dtype=torch.bool),
-        vals=torch.zeros(()),
-        advantages=torch.zeros(()),
-        returns=torch.zeros(()),
-        device=device,
-    ).expand(args.num_steps, args.num_envs).clone()
-    container_flat = container.view(-1)
-    container_local = container_flat[:args.minibatch_size].clone()
+    container_local = None
 
     avg_returns = deque(maxlen=20)
 
@@ -382,13 +370,6 @@ if __name__ == "__main__":
             # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
 
-    b_obs_mb_inds = None
-    b_logprobs_mb_inds = None
-    b_actions_mb_inds = None
-    b_advantages_mb_inds = None
-    b_returns_mb_inds = None
-    b_values_mb_inds = None
-
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
     for iteration in pbar:
@@ -414,7 +395,11 @@ if __name__ == "__main__":
             for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
                 end = start + args.minibatch_size
 
-                container_local.update_(c)
+                if container_local is None:
+                    container_local = c.clone()
+                else:
+                    container_local.update_(c)
+
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
