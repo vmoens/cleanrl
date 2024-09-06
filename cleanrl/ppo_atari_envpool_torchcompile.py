@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
-    next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.float)
+    next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
     next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
 
@@ -344,7 +344,7 @@ if __name__ == "__main__":
             )
 
             with timeit("rollout - cast tensors"):
-                next_obs = torch.tensor(next_obs, dtype=torch.float).to(device, non_blocking=True)
+                next_obs = torch.tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
                 next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
                 obs, done = next_obs, next_done
 
