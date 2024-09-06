@@ -326,10 +326,12 @@ if __name__ == "__main__":
             action, logprob, _, value = policy(obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
+            with timeit("rollout step"):
+                next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            ts.append(
-                Transitions(
+            with timeit("tc create"):
+                ts.append(
+                    Transitions(
                     obs=obs,
                     dones=done,
                     vals=value.flatten(),
@@ -354,7 +356,8 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
-        container = torch.stack(ts, 0)
+        with timeit("tc stack"):
+            container = torch.stack(ts, 0)
         return global_step, next_obs, next_done, container
 
 
