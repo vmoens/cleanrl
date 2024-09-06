@@ -1,5 +1,4 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_atari_envpoolpy
-import contextlib
 import os
 import random
 import time
@@ -228,8 +227,8 @@ if __name__ == "__main__":
         dones: torch.Tensor
         vals: torch.Tensor
         rewards: torch.Tensor
-        advantages: torch.Tensor=None
-        returns: torch.Tensor=None
+        advantages: torch.Tensor = None
+        returns: torch.Tensor = None
 
 
     container_local = None
@@ -288,6 +287,7 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
+
     policy = agent_inference.get_action_and_value
     get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
@@ -295,12 +295,13 @@ if __name__ == "__main__":
         policy = torch.compile(policy, fullgraph=True, mode="reduce-overhead")
         get_value = torch.compile(get_value, fullgraph=True, mode="reduce-overhead")
 
+
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
         next_value = get_value(next_obs).reshape(-1)
         lastgaelam = 0
         advantages = []
-        for t in range(args.num_steps-1, -1, -1):
+        for t in range(args.num_steps - 1, -1, -1):
             if t == args.num_steps - 1:
                 nextnonterminal = (~next_done).float()
                 nextvalues = next_value
@@ -314,8 +315,10 @@ if __name__ == "__main__":
         container.returns = container.advantages + container.vals
         return container
 
+
     if args.compile or args.cudagraphs:
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+
 
     def rollout(global_step, obs, done):
         ts = []
@@ -329,7 +332,7 @@ if __name__ == "__main__":
             next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
             ts.append(
-                    Transitions(
+                Transitions(
                     obs=obs,
                     dones=done,
                     vals=value.flatten(),
@@ -348,10 +351,10 @@ if __name__ == "__main__":
             # for idx, d in enumerate(next_done):
             #     if d and info["lives"][idx] == 0:
             #         avg_returns.append(info["r"][idx])
-                    # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
-                    # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
-                    # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-                    # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
+            # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
+            # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
+            # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
+            # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         container = torch.stack(ts, 0)
         return global_step, next_obs, next_done, container
@@ -393,7 +396,7 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
 
                 if container_local is None:
-                   container_local = c.clone()
+                    container_local = c.clone()
                 else:
                     container_local.update_(c)
 
@@ -406,11 +409,21 @@ if __name__ == "__main__":
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                               b_actions_mb_inds,
+                                                                                               b_logprobs_mb_inds,
+                                                                                               b_advantages_mb_inds,
+                                                                                               b_returns_mb_inds,
+                                                                                               b_values_mb_inds)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
                     # Run a second time with capture
                     with torch.cuda.graph(graph_update):
-                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
+                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                                   b_actions_mb_inds,
+                                                                                                   b_logprobs_mb_inds,
+                                                                                                   b_advantages_mb_inds,
+                                                                                                   b_returns_mb_inds,
+                                                                                                   b_values_mb_inds)
                 else:
                     # Run captured graph
                     graph_update.replay()
