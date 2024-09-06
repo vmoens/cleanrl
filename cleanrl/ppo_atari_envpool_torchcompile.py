@@ -404,6 +404,14 @@ if __name__ == "__main__":
             global_step_burnin = global_step
             start_time = time.time()
 
+        # Annealing the rate if instructed to do so.
+        if args.anneal_lr:
+            frac = 1.0 - (iteration - 1.0) / args.num_iterations
+            lrnow = frac * args.learning_rate
+            if not isinstance(optimizer.param_groups[0]["lr"], torch.Tensor):
+                optimizer.param_groups[0]["lr"] = torch.tensor(optimizer.param_groups[0]["lr"], device=device)
+            optimizer.param_groups[0]["lr"].copy_(lrnow)
+
         torch.compiler.cudagraph_mark_step_begin()
         with timeit("rollout"):
             next_obs, next_done, container = rollout(next_obs, next_done, get_returns=iteration % 10 == 0, avg_returns=avg_returns)
