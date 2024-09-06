@@ -226,7 +226,7 @@ if __name__ == "__main__":
         logprobs: torch.Tensor
         rewards: torch.Tensor
         dones: torch.Tensor
-        values: torch.Tensor
+        vals: torch.Tensor
         advantages: torch.Tensor
 
 
@@ -236,7 +236,7 @@ if __name__ == "__main__":
         logprobs=torch.zeros((), device=device),
         rewards=torch.zeros((), device=device),
         dones=torch.zeros((), dtype=torch.bool, device=device),
-        values=torch.zeros((), device=device),
+        vals=torch.zeros((), device=device),
         advantages=torch.zeros((), device=device),
     ).expand(args.num_steps, args.num_envs).clone()
     container_flat = container.view(-1)
@@ -256,7 +256,7 @@ if __name__ == "__main__":
         b_logprobs_mb_inds = container.logprobs
         b_advantages_mb_inds = container.advantages
         b_returns_mb_inds = container.returns
-        b_values_mb_inds = container.values
+        b_values_mb_inds = container.vals
 
         optimizer.zero_grad()
         _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
@@ -312,10 +312,10 @@ if __name__ == "__main__":
                 nextvalues = next_value
             else:
                 nextnonterminal = (~container.dones[t + 1]).float()
-                nextvalues = container.values[t + 1]
-            delta = container.rewards[t] + args.gamma * nextvalues * nextnonterminal - container.values[t]
+                nextvalues = container.vals[t + 1]
+            delta = container.rewards[t] + args.gamma * nextvalues * nextnonterminal - container.vals[t]
             container.advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-        container.returns = container.advantages + container.values
+        container.returns = container.advantages + container.vals
 
 
     def rollout(global_step, next_obs, next_done):
@@ -326,7 +326,7 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             action, logprob, _, value = policy(next_obs)
-            container.values[step] = value.flatten()
+            container.vals[step] = value.flatten()
 
             container.actions[step] = action
             container.logprobs[step] = logprob
