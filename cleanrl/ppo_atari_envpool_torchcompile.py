@@ -339,7 +339,8 @@ if __name__ == "__main__":
                 actions=action,
                 logprobs=logprob,
                 rewards=reward.reshape(-1),
-                device=device
+                device=device,
+                batch_size=(args.num_envs,)
             ))
 
             next_obs, next_done = torch.tensor(next_obs).to(device=device, non_blocking=True), torch.tensor(next_done).to(device=device, non_blocking=True)
