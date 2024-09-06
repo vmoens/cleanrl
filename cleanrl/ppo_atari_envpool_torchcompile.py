@@ -312,8 +312,8 @@ if __name__ == "__main__":
         container.returns = container.advantages + container.vals
         return container
 
-    # if args.compile:
-    #     gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+    if args.compile:
+        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
@@ -353,7 +353,6 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         container = torch.stack(ts, 0)
-        container = gae(next_obs, next_done, container)
         return global_step, next_obs, next_done, container
 
 
@@ -383,6 +382,7 @@ if __name__ == "__main__":
         #     optimizer.param_groups[0]["lr"] = lrnow
 
         global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        container = gae(next_obs, next_done, container)
         container_flat = container.view(-1)
 
         # Optimizing the policy and value network
