@@ -310,7 +310,7 @@ if __name__ == "__main__":
             next_obs, reward, next_done = step_func(action)
 
             ts.append(
-                tensordict.TensorDict(
+                tensordict.TensorDict._new_unsafe(
                     obs=obs,
                     dones=done,
                     vals=value.flatten(),
