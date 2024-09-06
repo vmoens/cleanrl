@@ -339,14 +339,13 @@ if __name__ == "__main__":
                     actions=action,
                     logprobs=logprob,
                     rewards=torch.tensor(reward, device=device).reshape(-1),
-                    device=device,
                     batch_size=(args.num_envs,)
                 )
             )
 
             with timeit("rollout - cast tensors"):
-                next_obs = torch.tensor(next_obs, dtype=torch.float, device=device)
-                next_done = torch.tensor(next_done, dtype=torch.bool, device=device)
+                next_obs = torch.tensor(next_obs, dtype=torch.float).to(device, non_blocking=True)
+                next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
                 obs, done = next_obs, next_done
 
             # TODO
