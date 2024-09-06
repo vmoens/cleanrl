@@ -325,8 +325,8 @@ if __name__ == "__main__":
         container = torch.stack(ts, 0).to(device)
         return global_step, next_obs, next_done, container
 
-    # if args.compile:
-    #     rollout = torch.compile(rollout)
+    if args.compile:
+        rollout = torch.compile(rollout)
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
