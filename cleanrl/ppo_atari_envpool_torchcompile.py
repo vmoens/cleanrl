@@ -384,7 +384,7 @@ if __name__ == "__main__":
         #     lrnow = frac * args.learning_rate
         #     optimizer.param_groups[0]["lr"] = lrnow
 
-        rollout(global_step, next_obs, next_done)
+        global_step, next_obs, next_done = rollout(global_step, next_obs, next_done)
 
         # Optimizing the policy and value network
         clipfracs = []
