@@ -106,16 +106,16 @@ class CudaGraphCompiledModule:
 
     @torch.compile
     @tensordict.nn.dispatch(auto_batch_size=False)
-    def __call__(self, tensordict):
+    def __call__(self, tensordict, *args, **kwargs):
         if self.counter < self.warmup:
-            out = self.module(tensordict)
+            out = self.module(tensordict, *args, **kwargs)
             self.counter += 1
             return out
         elif self.counter == self.warmup:
             self.graph = torch.cuda.CUDAGraph()
             self._tensordict = tensordict
             with torch.cuda.graph(self.graph):
-                out = self.module(tensordict)
+                out = self.module(tensordict, *args, **kwargs)
             self._out = out
             self.counter += 1
             return out
@@ -368,7 +368,12 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
-    update = tensordict.nn.TensorDictModule(update, in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"], out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"])
+    update = tensordict.nn.TensorDictModule(
+        update,
+        in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"],
+        out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"]
+    )
+
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
@@ -400,7 +405,7 @@ if __name__ == "__main__":
                 else:
                     container_local.update_(container_flat[b])
 
-                out = update(container_local)
+                out = update(container_local, tensordict_out=tensordict.TensorDict())
 
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
