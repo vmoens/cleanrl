@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import tqdm
 import tyro
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
@@ -418,7 +419,8 @@ if __name__ == "__main__":
             storage = storage.replace(rewards=storage.rewards.at[step].set(reward))
         return agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step
 
-    for iteration in range(1, args.num_iterations + 1):
+    pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
+    for iteration in pbar:
         if iteration == args.measure_burnin:
             start_time = time.time()
             global_step_init = global_step
@@ -433,25 +435,25 @@ if __name__ == "__main__":
             key,
         )
         avg_episodic_return = np.mean(jax.device_get(episode_stats.returned_episode_returns))
-        print(f"global_step={global_step}, avg_episodic_return={avg_episodic_return}")
+        # print(f"global_step={global_step}, avg_episodic_return={avg_episodic_return}")
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        writer.add_scalar("charts/avg_episodic_return", avg_episodic_return, global_step)
-        writer.add_scalar(
-            "charts/avg_episodic_length", np.mean(jax.device_get(episode_stats.returned_episode_lengths)), global_step
-        )
-        writer.add_scalar("charts/learning_rate", agent_state.opt_state[1].hyperparams["learning_rate"].item(), global_step)
-        writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        writer.add_scalar("losses/loss", loss.item(), global_step)
+        # writer.add_scalar("charts/avg_episodic_return", avg_episodic_return, global_step)
+        # writer.add_scalar(
+        #     "charts/avg_episodic_length", np.mean(jax.device_get(episode_stats.returned_episode_lengths)), global_step
+        # )
+        # writer.add_scalar("charts/learning_rate", agent_state.opt_state[1].hyperparams["learning_rate"].item(), global_step)
+        # writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
+        # writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
+        # writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
+        # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
+        # writer.add_scalar("losses/loss", loss.item(), global_step)
         if start_time is not None:
-            print("SPS:", int((global_step - global_step_init) / (time.time() - start_time)))
-            writer.add_scalar("charts/SPS", int((global_step - global_step_init) / (time.time() - start_time)), global_step)
-        writer.add_scalar(
-            "charts/SPS_update", int(args.num_envs * args.num_steps / (time.time() - iteration_time_start)), global_step
-        )
+            pbar.set_description(f"SPS: {(global_step - global_step_init) / (time.time() - start_time): 4.4f}")
+            # writer.add_scalar("charts/SPS", int((global_step - global_step_init) / (time.time() - start_time)), global_step)
+        # writer.add_scalar(
+        #     "charts/SPS_update", int(args.num_envs * args.num_steps / (time.time() - iteration_time_start)), global_step
+        # )
 
     envs.close()
     writer.close()
