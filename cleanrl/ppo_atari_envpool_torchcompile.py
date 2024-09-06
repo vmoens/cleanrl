@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
-        next_value = get_value(next_obs).reshape(1, -1)
+        next_value = get_value(next_obs).reshape(-1)
         lastgaelam = 0
         advantages = []
         for t in reversed(range(args.num_steps)):
