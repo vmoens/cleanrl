@@ -323,7 +323,7 @@ if __name__ == "__main__":
         return next_obs, next_done.to(device, non_blocking=True), container
 
     if args.compile:
-        rollout = torch.compile(rollout)
+        rollout = torch.compile(rollout, mode="reduce-overhead")
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
