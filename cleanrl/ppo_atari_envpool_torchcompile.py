@@ -94,6 +94,31 @@ class Args:
     """Number of burn-in iterations for speed measure."""
 
 
+class CudaGraphCompiledModule:
+    def __init__(self, module, warmup=2):
+        self.module = module
+        self.counter = 0
+        self.warmup = warmup
+        if hasattr(module, "in_keys"):
+            self.in_keys = module.in_keys
+        if hasattr(module, "out_keys"):
+            self.out_keys = module.out_keys
+
+    @tensordict.nn.dispatch
+    def __call__(self, data):
+        if self.counter < self.warmup:
+            out = self.module(data)
+            return out
+        elif self.counter == self.warmup:
+            self.graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(self.graph):
+                out = self.module(data)
+            self._out = out
+            return out
+        else:
+            self.graph.replay()
+            return self._out.clone() if self._out is not None else None
+
 class RecordEpisodeStatistics(gym.Wrapper):
     def __init__(self, env, deque_size=100):
         super().__init__(env)
@@ -230,9 +255,13 @@ if __name__ == "__main__":
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
     next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
-
-    def update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
-               b_values_mb_inds):
+    def update(container_local):
+        b_obs_mb_inds = container_local["obs"]
+        b_actions_mb_inds = container_local["actions"]
+        b_logprobs_mb_inds = container_local["logprobs"]
+        b_advantages_mb_inds = container_local["advantages"]
+        b_returns_mb_inds = container_local["returns"]
+        b_values_mb_inds = container_local["vals"]
 
         optimizer.zero_grad()
         _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
@@ -277,19 +306,16 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
-
-    policy = agent_inference.get_action_and_value
+    # Define networks
+    policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "_", "value"])
     get_value = agent_inference.get_value
+
+    # Compile policy
     if args.compile or args.cudagraphs:
         args.compile = True
+        policy = torch.compile(policy)
         if args.cudagraphs:
-            policy = torch.compile(policy)
-            for _ in range(3):
-                policy(next_obs)
-            graph_policy = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph_policy):
-                action, logprob, _, value = policy(next_obs)
-            out_policy = tensordict.TensorDict({"action": action, "logprob": logprob, "value": value})
+            policy = CudaGraphCompiledModule(policy)
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
@@ -319,14 +345,7 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            if args.cudagraphs:
-                graph_policy.replay()
-                op = out_policy.clone()
-                action = op["action"]
-                logprob = op["logprob"]
-                value = op["value"]
-            else:
-                action, logprob, _, value = policy(obs=obs)
+            action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
@@ -380,32 +399,16 @@ if __name__ == "__main__":
 
                 if container_local is None:
                     container_local = container_flat[b].clone()
-                    b_obs_mb_inds = container_local["obs"]
-                    b_actions_mb_inds = container_local["actions"]
-                    b_logprobs_mb_inds = container_local["logprobs"]
-                    b_advantages_mb_inds = container_local["advantages"]
-                    b_returns_mb_inds = container_local["returns"]
-                    b_values_mb_inds = container_local["vals"]
                 else:
                     container_local.update_(container_flat[b])
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                               b_actions_mb_inds,
-                                                                                               b_logprobs_mb_inds,
-                                                                                               b_advantages_mb_inds,
-                                                                                               b_returns_mb_inds,
-                                                                                               b_values_mb_inds)
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
                     # Run a second time with capture
                     with torch.cuda.graph(graph_update):
-                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                                   b_actions_mb_inds,
-                                                                                                   b_logprobs_mb_inds,
-                                                                                                   b_advantages_mb_inds,
-                                                                                                   b_returns_mb_inds,
-                                                                                                   b_values_mb_inds)
+                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
                 else:
                     # Run captured graph
                     graph_update.replay()
