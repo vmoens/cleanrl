@@ -243,7 +243,7 @@ if __name__ == "__main__":
 
     @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        next_obs_np, reward, next_done, info = envs.step(action.numpy())
+        next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
         return torch.tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
 
     @step_func.register_fake
