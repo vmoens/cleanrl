@@ -293,8 +293,8 @@ if __name__ == "__main__":
         container["returns"] = container["advantages"] + container["vals"]
         return container
 
-    if args.compile:
-        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+    # if args.compile:
+    #     gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(obs, done):
         ts = []
@@ -320,10 +320,11 @@ if __name__ == "__main__":
             obs = next_obs = next_obs.to(device, non_blocking=True)
 
         container = torch.stack(ts, 0).to(device)
+        gae(next_obs, next_done, container)
         return next_obs, next_done.to(device, non_blocking=True), container
 
-    # if args.compile:
-    #     rollout = torch.compile(rollout)
+    if args.compile:
+        rollout = torch.compile(rollout)
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
@@ -400,8 +401,8 @@ if __name__ == "__main__":
             next_obs, next_done, container = rollout(next_obs, next_done)
         global_step += container.numel()
 
-        with timeit("gae"):
-            container = gae(next_obs, next_done, container)
+        # with timeit("gae"):
+        #     container = gae(next_obs, next_done, container)
         with timeit("view"):
             container_flat = container.view(-1)
 
