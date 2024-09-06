@@ -341,6 +341,7 @@ if __name__ == "__main__":
                 rewards=reward.reshape(-1),
                 device=device
             ))
+            obs, done = next_obs, next_done
 
             next_obs, next_done = torch.tensor(next_obs).to(device=device, non_blocking=True), torch.tensor(next_done).to(device=device, non_blocking=True)
 
@@ -352,6 +353,7 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
+
         torch.stack(ts, 0, out=container_local)
         gae(next_obs, next_done, container)
         return global_step, next_obs, next_done
