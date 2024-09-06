@@ -278,23 +278,27 @@ if __name__ == "__main__":
         # bootstrap value if not done
         next_value = get_value(next_obs).reshape(-1)
         lastgaelam = 0
+        dones = container["dones"].unbind(0)
+        vals = container["vals"].unbind(0)
+        rewards = container["rewards"].unbind(0)
+
         advantages = []
         for t in range(args.num_steps - 1, -1, -1):
             if t == args.num_steps - 1:
                 nextnonterminal = (~next_done).float()
                 nextvalues = next_value
             else:
-                nextnonterminal = (~container["dones"][t + 1]).float()
-                nextvalues = container["vals"][t + 1]
-            delta = container["rewards"][t] + args.gamma * nextvalues * nextnonterminal - container["vals"][t]
+                nextnonterminal = (~dones[t + 1]).float()
+                nextvalues = vals[t + 1]
+            delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - vals[t]
             advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
             lastgaelam = advantages[-1]
         container["advantages"] = torch.stack(list(reversed(advantages)))
         container["returns"] = container["advantages"] + container["vals"]
         return container
 
-    # if args.compile:
-    #     gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+    if args.compile:
+        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(obs, done):
         ts = []
@@ -321,7 +325,6 @@ if __name__ == "__main__":
 
         container = torch.stack(ts, 0).to(device)
         next_done = next_done.to(device, non_blocking=True)
-        gae(next_obs, next_done, container)
         return next_obs, next_done, container
 
     if args.compile:
@@ -402,8 +405,8 @@ if __name__ == "__main__":
             next_obs, next_done, container = rollout(next_obs, next_done)
         global_step += container.numel()
 
-        # with timeit("gae"):
-        #     container = gae(next_obs, next_done, container)
+        with timeit("gae"):
+            container = gae(next_obs, next_done, container)
         with timeit("view"):
             container_flat = container.view(-1)
 
