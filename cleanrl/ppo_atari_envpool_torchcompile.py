@@ -219,17 +219,6 @@ if __name__ == "__main__":
 
 
     # ALGO Logic: Storage setup
-    @tensordict.tensorclass
-    class Transitions:
-        obs: torch.Tensor
-        actions: torch.Tensor
-        logprobs: torch.Tensor
-        dones: torch.Tensor
-        vals: torch.Tensor
-        rewards: torch.Tensor
-        advantages: torch.Tensor = None
-        returns: torch.Tensor = None
-
 
     container_local = None
 
@@ -306,13 +295,13 @@ if __name__ == "__main__":
                 nextnonterminal = (~next_done).float()
                 nextvalues = next_value
             else:
-                nextnonterminal = (~container.dones[t + 1]).float()
-                nextvalues = container.vals[t + 1]
-            delta = container.rewards[t] + args.gamma * nextvalues * nextnonterminal - container.vals[t]
+                nextnonterminal = (~container["dones"][t + 1]).float()
+                nextvalues = container["vals"][t + 1]
+            delta = container["rewards"][t] + args.gamma * nextvalues * nextnonterminal - container["vals"][t]
             advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
             lastgaelam = advantages[-1]
-        container.advantages = torch.stack(list(reversed(advantages)))
-        container.returns = container.advantages + container.vals
+        container["advantages"] = torch.stack(list(reversed(advantages)))
+        container["returns"] = container["advantages"] + container["vals"]
         return container
 
 
@@ -331,7 +320,7 @@ if __name__ == "__main__":
             next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
             ts.append(
-                Transitions(
+                tensordict.TensorDict(
                     obs=obs,
                     dones=done,
                     vals=value.flatten(),
@@ -390,12 +379,12 @@ if __name__ == "__main__":
                 else:
                     container_local.update_(c)
 
-                b_obs_mb_inds = container_local.obs
-                b_actions_mb_inds = container_local.actions
-                b_logprobs_mb_inds = container_local.logprobs
-                b_advantages_mb_inds = container_local.advantages
-                b_returns_mb_inds = container_local.returns
-                b_values_mb_inds = container_local.vals
+                b_obs_mb_inds = container_local["obs"]
+                b_actions_mb_inds = container_local["actions"]
+                b_logprobs_mb_inds = container_local["logprobs"]
+                b_advantages_mb_inds = container_local["advantages"]
+                b_returns_mb_inds = container_local["returns"]
+                b_values_mb_inds = container_local["vals"]
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
