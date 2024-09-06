@@ -18,7 +18,6 @@ import tqdm
 import tyro
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
-from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 
@@ -437,7 +436,6 @@ if __name__ == "__main__":
         # writer.add_scalar("losses/explained_variance", explained_var, global_step)
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
-            timeit.print()
         # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
