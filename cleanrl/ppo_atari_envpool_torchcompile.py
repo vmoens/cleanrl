@@ -250,7 +250,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.float)
-    next_done = torch.zeros(args.num_envs, device=device)
+    next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
 
     def update(container: Transitions):
@@ -343,7 +343,7 @@ if __name__ == "__main__":
                 batch_size=(args.num_envs,)
             ))
 
-            next_obs, next_done = torch.tensor(next_obs).to(device=device, non_blocking=True), torch.tensor(next_done).to(device=device, non_blocking=True)
+            next_obs, next_done = torch.tensor(next_obs, dtype=torch.float).to(device=device, non_blocking=True), torch.tensor(next_done, dtype=torch.bool).to(device=device, non_blocking=True)
             obs, done = next_obs, next_done
 
             for idx, d in enumerate(next_done):
