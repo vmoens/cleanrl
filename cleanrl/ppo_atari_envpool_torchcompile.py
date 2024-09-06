@@ -329,7 +329,7 @@ if __name__ == "__main__":
 
         container = torch.stack(ts, 0).to(device)
         next_done = next_done.to(device, non_blocking=True)
-        return next_obs, next_done, container, avg_returns
+        return next_obs, next_done, container
 
     # if args.compile:
     #     rollout = torch.compile(rollout)
