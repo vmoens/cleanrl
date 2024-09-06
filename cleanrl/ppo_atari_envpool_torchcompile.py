@@ -346,7 +346,8 @@ if __name__ == "__main__":
                 batch_size=(args.num_envs,)
             ))
 
-            next_obs, next_done = torch.tensor(next_obs, dtype=torch.float).to(device=device, non_blocking=True), torch.tensor(next_done, dtype=torch.bool).to(device=device, non_blocking=True)
+            next_obs = torch.tensor(next_obs, dtype=torch.float).to(device=device, non_blocking=True)
+            next_done = torch.tensor(next_done, dtype=torch.bool).to(device=device, non_blocking=True)
             obs, done = next_obs, next_done
 
             for idx, d in enumerate(next_done):
@@ -405,7 +406,7 @@ if __name__ == "__main__":
             b_inds = torch.randperm(args.batch_size, device=device)
             container_flat = container_flat[b_inds]
             containers = container_flat.split(args.minibatch_size)
-            for start, c in zip(range(0, args.batch_size, args.minibatch_size)):
+            for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
                 end = start + args.minibatch_size
 
                 container_local.update_(c)
