@@ -445,6 +445,9 @@ if __name__ == "__main__":
         # writer.add_scalar("losses/explained_variance", explained_var, global_step)
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
+            if iteration % 10 ==0:
+                timeit.print()
+
         # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
