@@ -207,7 +207,7 @@ if __name__ == "__main__":
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space
-    envs = RecordEpisodeStatistics(envs)
+    # envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs, device=device)
@@ -321,23 +321,19 @@ if __name__ == "__main__":
         container.returns.copy_(container.advantages + container.vals)
 
 
-    def rollout(global_step, next_obs, next_done):
+    def rollout(global_step, obs, done):
         for step in range(0, args.num_steps):
             global_step += args.num_envs
-            container.obs[step] = next_obs
-            container.dones[step] = next_done
 
             # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(next_obs)
-            container.vals[step] = value.flatten()
-
-            container.actions[step] = action
-            container.logprobs[step] = logprob
+            action, logprob, _, value = policy(obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
-            container.rewards[step] = torch.tensor(reward, device=device).view(-1)
-            next_obs, next_done = torch.tensor(next_obs, device=device), torch.tensor(next_done, device=device)
+
+            container[step] = Transitions(obs=obs, dones=done, vals=value.flatten(), actions=action, logprobs=logprob, reward=reward.view(-1), device=device)
+
+            next_obs, next_done = torch.tensor(next_obs).to(device=device, non_blocking=True), torch.tensor(next_done).to(device=device, non_blocking=True)
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
