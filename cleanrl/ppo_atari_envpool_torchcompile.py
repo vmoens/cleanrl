@@ -440,10 +440,11 @@ if __name__ == "__main__":
                     out = update(container_local, tensordict_out=tensordict.TensorDict())
 
         if global_step_burnin is not None and iteration % 10 == 0:
-            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps, "
-                                 f"reward avg: {container['rewards'].mean():4.4f}, "
-                                 f"reward max: {container['rewards'].max():4.4f}, "
-                                 f"returns: {torch.tensor(avg_returns).mean(): 4.4f}")
+            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.1f} sps, "
+                                 f"reward avg: {container['rewards'].mean():4.2f}, "
+                                 f"reward max: {container['rewards'].max():4.2f}, "
+                                 f"returns: {torch.tensor(avg_returns).mean(): 4.2f},"
+                                 f"lr: {optimizer.param_groups[0]['lr']: 4.2f}")
             timeit.print()
 
     envs.close()
