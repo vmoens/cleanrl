@@ -4,6 +4,7 @@ import random
 import time
 from collections import deque
 from dataclasses import dataclass
+from typing import Tuple
 
 import envpool
 # import gymnasium as gym
@@ -240,6 +241,17 @@ if __name__ == "__main__":
     envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+    @torch.library.custom_op("mylib::step", mutates_args=())
+    def step(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        next_obs_np, reward, next_done, info = envs.step(action.numpy())
+        return torch.tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
+
+    @step.register_fake
+    def _(action):
+        return (torch.empty((args.num_envs, 4, 84, 84), dtype=torch.uint8),
+                torch.empty((args.num_envs,), dtype=torch.float),
+                torch.empty((args.num_envs,), dtype=torch.bool))
+
     ####### Agent #######
     agent = Agent(envs, device=device)
     # Make a version of agent with detached params
@@ -289,12 +301,10 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            with tensordict.utils.timeit("rollout - policy"):
-                action, logprob, _, value = policy(obs=obs)
+            action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            with tensordict.utils.timeit("rollout - step"):
-                next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
+            next_obs_np, reward, next_done = step(action)
 
             ts.append(
                 tensordict.TensorDict(
@@ -314,6 +324,9 @@ if __name__ == "__main__":
 
         container = torch.stack(ts, 0).to(device)
         return global_step, next_obs, next_done, container
+
+    if args.compile:
+        rollout = torch.compile(rollout)
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
