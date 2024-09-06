@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_atari_envpoolpy
+import contextlib
 import os
 import random
 import time
@@ -384,9 +385,9 @@ if __name__ == "__main__":
         #     optimizer.param_groups[0]["lr"] = lrnow
 
         torch.compiler.cudagraph_mark_step_begin()
-        with timeit("rollout"):
+        with timeit("rollout") if global_step_burnin is not None else contextlib.nullcontext():
             global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        with timeit("view"):
+        with timeit("view") if global_step_burnin is not None else contextlib.nullcontext():
             container_flat = container.view(-1)
 
         # Optimizing the policy and value network
@@ -398,13 +399,13 @@ if __name__ == "__main__":
             for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
                 end = start + args.minibatch_size
 
-                with timeit("update tc"):
+                with timeit("update tc") if global_step_burnin is not None else contextlib.nullcontext():
                     if container_local is None:
                        container_local = c.clone()
                     else:
                         container_local.update_(c)
 
-                with timeit("update"):
+                with timeit("update") if global_step_burnin is not None else contextlib.nullcontext():
                     if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                         # Run a first time without capture
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
