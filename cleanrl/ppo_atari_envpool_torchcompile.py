@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     def rollout(global_step, obs, done):
         ts = []
-        for step in range(0, args.num_steps):
+        for step in range(args.num_steps):
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic

@@ -309,7 +309,7 @@ if __name__ == "__main__":
         #     lrnow = frac * args.learning_rate
         #     optimizer.param_groups[0]["lr"] = lrnow
 
-        for step in range(0, args.num_steps):
+        for step in range(args.num_steps):
             global_step += args.num_envs
             obs[step] = next_obs
             dones[step] = next_done
