@@ -356,7 +356,7 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         # torch.stack(ts, 0, out=container)
-        container.upate_(torch.stack(ts, 0))
+        container.update_(torch.stack(ts, 0))
         gae(next_obs, next_done, container)
         return global_step, next_obs, next_done
 
