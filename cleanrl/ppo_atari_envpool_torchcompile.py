@@ -356,9 +356,8 @@ if __name__ == "__main__":
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        policy = torch.compile(policy, mode="reduce-overhead")
-        get_value = torch.compile(get_value, mode="reduce-overhead")
-        gae = torch.compile(gae, mode="reduce-overhead")
+        # policy = torch.compile(policy, mode="reduce-overhead")
+        # get_value = torch.compile(get_value, mode="reduce-overhead")
         rollout = torch.compile(rollout, mode="reduce-overhead")
         if args.cudagraphs:
             # graph_policy = torch.cuda.CUDAGraph()
@@ -397,11 +396,14 @@ if __name__ == "__main__":
                 container_local.update_(container_flat[mb_inds])
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
+                    # Run a first time without capture
                     approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
                 elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
+                    # Run a second time with capture
                     with torch.cuda.graph(graph_update):
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
                 else:
+                    # Run captured graph
                     graph_update.replay()
 
                 # TODO
