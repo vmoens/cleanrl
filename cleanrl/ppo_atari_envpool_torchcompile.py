@@ -311,35 +311,39 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(obs=obs)
+            with timeit("0. rollout - 0. policy"):
+                action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
+            with timeit("0. rollout - 1. step"):
+                next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            ts.append(
+            with timeit("0. rollout - 2. td"):
+                ts.append(
                 tensordict.TensorDict(
                     obs=obs,
                     dones=done,
                     vals=value.flatten(),
                     actions=action,
                     logprobs=logprob,
-                    rewards=torch.tensor(reward, device=device).reshape(-1),
+                    rewards=torch.as_tensor(reward).reshape(-1),
                     batch_size=(args.num_envs,)
                 )
             )
 
-            next_obs = torch.tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
-            next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
+            with timeit("0. rollout - 3. to"):
+                next_obs = torch.as_tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
+                next_done = torch.as_tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
-        container = torch.stack(ts, 0)
+        container = torch.stack(ts, 0).to(device)
         return global_step, next_obs, next_done, container
 
 
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        rollout = torch.compile(rollout)
+        # rollout = torch.compile(rollout)
         if args.cudagraphs:
             # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()

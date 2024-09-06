@@ -17,6 +17,7 @@ import tyro
 import tensordict
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
+from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 
@@ -314,16 +315,19 @@ if __name__ == "__main__":
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(next_obs)
+            with timeit("0. rollout - 0. policy"):
+                action, logprob, _, value = policy(next_obs)
             values[step] = value.flatten()
 
             actions[step] = action
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
+            with timeit("0. rollout - 1. step"):
+                next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
             rewards[step] = torch.tensor(reward, device=device).view(-1)
-            next_obs, next_done = torch.tensor(next_obs, device=device), torch.tensor(next_done, device=device)
+            with timeit("0. rollout - 2. to"):
+                next_obs, next_done = torch.tensor(next_obs, device=device), torch.tensor(next_done, device=device)
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
