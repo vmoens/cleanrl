@@ -242,16 +242,16 @@ if __name__ == "__main__":
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     # Register step as a special op not to graph break
-    @torch.library.custom_op("mylib::step", mutates_args=())
+    # @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
         return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
 
-    @step_func.register_fake
-    def _(action):
-        return (torch.empty((args.num_envs, 4, 84, 84), dtype=torch.uint8),
-                torch.empty((args.num_envs,), dtype=torch.float),
-                torch.empty((args.num_envs,), dtype=torch.bool))
+    # @step_func.register_fake
+    # def _(action):
+    #     return (torch.empty((args.num_envs, 4, 84, 84), dtype=torch.uint8),
+    #             torch.empty((args.num_envs,), dtype=torch.float),
+    #             torch.empty((args.num_envs,), dtype=torch.bool))
 
     ####### Agent #######
     agent = Agent(envs, device=device)
