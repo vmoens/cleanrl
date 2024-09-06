@@ -363,8 +363,7 @@ if __name__ == "__main__":
         out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"]
     )
 
-    if args.compile or args.cudagraphs:
-        args.compile = True
+    if args.compile:
         update = torch.compile(update)
         if args.cudagraphs:
             update = CudaGraphCompiledModule(update)
@@ -385,9 +384,12 @@ if __name__ == "__main__":
             start_time = time.time()
 
         torch.compiler.cudagraph_mark_step_begin()
-        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        container = gae(next_obs, next_done, container)
-        container_flat = container.view(-1)
+        with timeit("rollout"):
+            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        with timeit("gae"):
+            container = gae(next_obs, next_done, container)
+        with timeit("view"):
+            container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
@@ -397,12 +399,14 @@ if __name__ == "__main__":
             for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                if container_local is None:
-                    container_local = container_flat[b].clone()
-                else:
-                    container_local.update_(container_flat[b])
+                with timeit("copy_data"):
+                    if container_local is None:
+                        container_local = container_flat[b].clone()
+                    else:
+                        container_local.update_(container_flat[b])
 
-                out = update(container_local, tensordict_out=tensordict.TensorDict())
+                with timeit("update"):
+                    out = update(container_local, tensordict_out=tensordict.TensorDict())
 
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
