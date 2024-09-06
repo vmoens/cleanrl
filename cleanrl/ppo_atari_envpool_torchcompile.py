@@ -21,7 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
-
+torch.set_float32_matmul_precision('high')
 
 @dataclass
 class Args:
