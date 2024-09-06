@@ -403,11 +403,12 @@ if __name__ == "__main__":
         clipfracs = []
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(args.batch_size, device=device)
-            for start in range(0, args.batch_size, args.minibatch_size):
+            container_flat = container_flat[b_inds]
+            containers = container_flat.split(args.minibatch_size)
+            for start, c in zip(range(0, args.batch_size, args.minibatch_size)):
                 end = start + args.minibatch_size
-                mb_inds = b_inds[start:end]
 
-                container_local.update_(container_flat[mb_inds])
+                container_local.update_(c)
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
