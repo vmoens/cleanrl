@@ -104,7 +104,6 @@ class CudaGraphCompiledModule:
         if hasattr(module, "out_keys"):
             self.out_keys = module.out_keys
 
-    # @torch.compile
     @tensordict.nn.dispatch(auto_batch_size=False)
     def __call__(self, tensordict, *args, **kwargs):
         if self.counter < self.warmup:
@@ -226,7 +225,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
+    ####### Environment setup #######
     envs = envpool.make(
         args.env_id,
         env_type="gym",
@@ -241,25 +240,16 @@ if __name__ == "__main__":
     envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+    ####### Agent #######
     agent = Agent(envs, device=device)
     # Make a version of agent with detached params
     agent_inference = Agent(envs, device=device)
     tensordict.TensorDict.from_module(agent).detach().to_module(agent_inference)
 
+    ####### Optimizer #######
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-
-    # ALGO Logic: Storage setup
-
-    container_local = None
-
-    avg_returns = deque(maxlen=20)
-
-    # TRY NOT TO MODIFY: start the game
-    global_step = 0
-    next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
-    next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
-
+    ####### Executables #######
     # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
     policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
     get_value = agent_inference.get_value
@@ -290,8 +280,8 @@ if __name__ == "__main__":
         container["returns"] = container["advantages"] + container["vals"]
         return container
 
-    if args.compile or args.cudagraphs:
-        gae = torch.compile(gae, fullgraph=True)
+    if args.compile:
+        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
@@ -322,7 +312,6 @@ if __name__ == "__main__":
 
         container = torch.stack(ts, 0).to(device)
         return global_step, next_obs, next_done, container
-
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
@@ -379,6 +368,14 @@ if __name__ == "__main__":
         update = torch.compile(update)
         if args.cudagraphs:
             update = CudaGraphCompiledModule(update)
+
+    # Tacking variables - DO NOT CHANGE
+    avg_returns = deque(maxlen=20)
+    global_step = 0
+    container_local = None
+    next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
+    next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
+
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
