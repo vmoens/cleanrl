@@ -241,6 +241,7 @@ if __name__ == "__main__":
     envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+    # Register step as a special op not to graph break
     @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
@@ -295,11 +296,9 @@ if __name__ == "__main__":
     if args.compile:
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
-    def rollout(global_step, obs, done):
+    def rollout(obs, done):
         ts = []
         for step in range(args.num_steps):
-            global_step += args.num_envs
-
             # ALGO LOGIC: action logic
             action, logprob, _, value = policy(obs=obs)
 
@@ -323,7 +322,7 @@ if __name__ == "__main__":
             obs, done = next_obs, next_done
 
         container = torch.stack(ts, 0).to(device)
-        return global_step, next_obs, next_done, container
+        return next_obs, next_done, container
 
     if args.compile:
         rollout = torch.compile(rollout)
@@ -400,7 +399,9 @@ if __name__ == "__main__":
 
         torch.compiler.cudagraph_mark_step_begin()
         with timeit("rollout"):
-            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+            next_obs, next_done, container = rollout(next_obs, next_done)
+        global_step += container.numel()
+
         with timeit("gae"):
             container = gae(next_obs, next_done, container)
         with timeit("view"):
