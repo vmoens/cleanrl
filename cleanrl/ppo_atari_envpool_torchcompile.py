@@ -345,7 +345,7 @@ if __name__ == "__main__":
                     vals=value.flatten(),
                     actions=action,
                     logprobs=logprob,
-                    rewards=reward.reshape(-1),
+                    rewards=torch.tensor(reward, device=device).reshape(-1),
                     device=device,
                     batch_size=(args.num_envs,)
                 )
