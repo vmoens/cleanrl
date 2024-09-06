@@ -309,6 +309,7 @@ if __name__ == "__main__":
         # bootstrap value if not done
         next_value = get_value(next_obs).reshape(1, -1)
         lastgaelam = 0
+        advantages = []
         for t in reversed(range(args.num_steps)):
             if t == args.num_steps - 1:
                 nextnonterminal = (~next_done).float()
@@ -317,8 +318,10 @@ if __name__ == "__main__":
                 nextnonterminal = (~container.dones[t + 1]).float()
                 nextvalues = container.vals[t + 1]
             delta = container.rewards[t] + args.gamma * nextvalues * nextnonterminal - container.vals[t]
-            container.advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-        container.returns.copy_(container.advantages + container.vals)
+            advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
+            lastgaelam = advantages[-1]
+        container.advantages = torch.stack(list(reversed(advantages)))
+        container.returns = container.advantages + container.vals
 
 
     def rollout(global_step, obs, done):
@@ -393,8 +396,9 @@ if __name__ == "__main__":
         #     lrnow = frac * args.learning_rate
         #     optimizer.param_groups[0]["lr"] = lrnow
 
-        global_step, next_obs, next_done, new_container = rollout(global_step, next_obs, next_done)
-        container.update_(new_container)
+        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        container_flat = container.view(-1)
+
         # Optimizing the policy and value network
         clipfracs = []
         for epoch in range(args.update_epochs):
@@ -403,7 +407,7 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                container_local.update_(container_flat[mb_inds])
+                container_local.update_(container[mb_inds])
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
