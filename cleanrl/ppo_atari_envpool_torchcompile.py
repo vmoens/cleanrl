@@ -289,10 +289,12 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(obs=obs)
+            with tensordict.utils.timeit("rollout - policy"):
+                action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
+            with tensordict.utils.timeit("rollout - step"):
+                next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
 
             ts.append(
                 tensordict.TensorDict(
