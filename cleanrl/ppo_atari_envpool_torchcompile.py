@@ -245,7 +245,7 @@ if __name__ == "__main__":
     # @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
-        return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
+        return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done), info
 
     # @step_func.register_fake
     # def _(action):
@@ -300,14 +300,18 @@ if __name__ == "__main__":
     if args.compile:
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
 
-    def rollout(obs, done):
+    def rollout(obs, done, get_returns=False, avg_returns=[]):
         ts = []
         for step in range(args.num_steps):
             # ALGO LOGIC: action logic
             action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done = step_func(action)
+            next_obs, reward, next_done, info = step_func(action)
+
+            if get_returns:
+                idx = next_done & info["lives"] == 0
+                avg_returns.append(info["r"][idx].mean())
 
             ts.append(
                 tensordict.TensorDict._new_unsafe(
@@ -325,7 +329,7 @@ if __name__ == "__main__":
 
         container = torch.stack(ts, 0).to(device)
         next_done = next_done.to(device, non_blocking=True)
-        return next_obs, next_done, container
+        return next_obs, next_done, container, avg_returns
 
     # if args.compile:
     #     rollout = torch.compile(rollout)
@@ -402,7 +406,7 @@ if __name__ == "__main__":
 
         torch.compiler.cudagraph_mark_step_begin()
         with timeit("rollout"):
-            next_obs, next_done, container = rollout(next_obs, next_done)
+            next_obs, next_done, container = rollout(next_obs, next_done, get_returns=iteration % 10 == 0, avg_returns=avg_returns)
         global_step += container.numel()
 
         with timeit("gae"):
@@ -427,12 +431,12 @@ if __name__ == "__main__":
                 with timeit("update"):
                     out = update(container_local, tensordict_out=tensordict.TensorDict())
 
-        if global_step_burnin is not None:
+        if global_step_burnin is not None and iteration % 10 == 0:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps, "
                                  f"reward avg: {container['rewards'].mean():4.4f}, "
-                                 f"reward max: {container['rewards'].max():4.4f}")
-            if iteration % 10 == 0:
-                timeit.print()
+                                 f"reward max: {container['rewards'].max():4.4f}, "
+                                 f"returns: {torch.tensor(avg_returns).mean(): 4.4f}")
+            timeit.print()
 
     envs.close()
     writer.close()
