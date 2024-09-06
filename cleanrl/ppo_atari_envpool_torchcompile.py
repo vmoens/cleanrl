@@ -281,8 +281,8 @@ if __name__ == "__main__":
     get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
-        policy = torch.compile(policy, fullgraph=True)
-        get_value = torch.compile(get_value, fullgraph=True)
+        # policy = torch.compile(policy, fullgraph=True)
+        # get_value = torch.compile(get_value, fullgraph=True)
 
 
     def gae(next_obs, next_done, container):
