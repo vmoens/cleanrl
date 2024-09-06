@@ -17,6 +17,7 @@ import tqdm
 import tyro
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
+from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 
@@ -281,9 +282,6 @@ if __name__ == "__main__":
     get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
-        # policy = torch.compile(policy, fullgraph=True)
-        # get_value = torch.compile(get_value, fullgraph=True)
-
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
@@ -303,7 +301,6 @@ if __name__ == "__main__":
         container["advantages"] = torch.stack(list(reversed(advantages)))
         container["returns"] = container["advantages"] + container["vals"]
         return container
-
 
     if args.compile or args.cudagraphs:
         gae = torch.compile(gae, fullgraph=True)
@@ -353,38 +350,34 @@ if __name__ == "__main__":
         if iteration == args.measure_burnin:
             global_step_burnin = global_step
             start_time = time.time()
-        # TODO
-        # Annealing the rate if instructed to do so.
-        # if args.anneal_lr:
-        #     frac = 1.0 - (iteration - 1.0) / args.num_iterations
-        #     lrnow = frac * args.learning_rate
-        #     optimizer.param_groups[0]["lr"] = lrnow
 
         torch.compiler.cudagraph_mark_step_begin()
-        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        container = gae(next_obs, next_done, container)
-        container_flat = container.view(-1)
+        with timeit("0. rollout"):
+            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        with timeit("1. gae"):
+            container = gae(next_obs, next_done, container)
+        with timeit("2. view"):
+            container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(args.batch_size, device=device)
-            container_flat = container_flat[b_inds]
-            containers = container_flat.split(args.minibatch_size)
-            for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
+            b_inds = b_inds.split(args.minibatch_size)
+            for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                if container_local is None:
-                    container_local = c.clone()
-                else:
-                    container_local.update_(c)
-
-                b_obs_mb_inds = container_local["obs"]
-                b_actions_mb_inds = container_local["actions"]
-                b_logprobs_mb_inds = container_local["logprobs"]
-                b_advantages_mb_inds = container_local["advantages"]
-                b_returns_mb_inds = container_local["returns"]
-                b_values_mb_inds = container_local["vals"]
+                with timeit("3. flip"):
+                    if container_local is None:
+                        container_local = container_flat[b_inds].clone()
+                        b_obs_mb_inds = container_local["obs"]
+                        b_actions_mb_inds = container_local["actions"]
+                        b_logprobs_mb_inds = container_local["logprobs"]
+                        b_advantages_mb_inds = container_local["advantages"]
+                        b_returns_mb_inds = container_local["returns"]
+                        b_values_mb_inds = container_local["vals"]
+                    else:
+                        container_local.update_(container_flat[b_inds])
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
@@ -407,31 +400,8 @@ if __name__ == "__main__":
                     # Run captured graph
                     graph_update.replay()
 
-                # TODO
-                # clipfracs += [clipfrac.clone()]
-
-            # TODO
-            # if args.target_kl is not None and approx_kl > args.target_kl:
-            #     break
-
-        # TODO
-        # y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-        # var_y = np.var(y_true)
-        # explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-
-        # TODO
-        # # TRY NOT TO MODIFY: record rewards for plotting purposes
-        # writer.add_scalar("charts/learning_rate", optimizer.param_groups[0]["lr"], global_step)
-        # writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-        # writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-        # writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-        # writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-        # writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-        # writer.add_scalar("losses/clipfrac", torch.stack(clipfracs).mean(), global_step)
-        # writer.add_scalar("losses/explained_variance", explained_var, global_step)
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
-        # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
     envs.close()
     writer.close()
