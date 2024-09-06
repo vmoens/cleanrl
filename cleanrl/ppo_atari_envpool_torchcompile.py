@@ -232,13 +232,14 @@ if __name__ == "__main__":
 
 
     container = Transitions(
-        obs=torch.zeros(envs.single_observation_space.shape, device=device),
-        actions=torch.zeros(envs.single_action_space.shape, device=device),
-        logprobs=torch.zeros((), device=device),
-        rewards=torch.zeros((), device=device),
-        dones=torch.zeros((), dtype=torch.bool, device=device),
-        vals=torch.zeros((), device=device),
-        advantages=torch.zeros((), device=device),
+        obs=torch.zeros(envs.single_observation_space.shape),
+        actions=torch.zeros(envs.single_action_space.shape),
+        logprobs=torch.zeros(()),
+        rewards=torch.zeros(()),
+        dones=torch.zeros((), dtype=torch.bool),
+        vals=torch.zeros(()),
+        advantages=torch.zeros(()),
+        device=device,
     ).expand(args.num_steps, args.num_envs).clone()
     container_flat = container.view(-1)
     container_local = container_flat[:args.minibatch_size].clone()
