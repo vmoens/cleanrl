@@ -314,24 +314,26 @@ if __name__ == "__main__":
         container.returns = container.advantages + container.vals
         return container
 
-    if args.compile:
+    policy = agent_inference.get_action_and_value
+    get_value = agent_inference.get_value
+    if args.compile or args.cudagraphs:
+        args.compile = True
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+        policy = torch.compile(policy, fullgraph=True, mode="reduce-overhead")
+        get_value = torch.compile(get_value, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
         for step in range(0, args.num_steps):
             global_step += args.num_envs
 
-            with timeit("rollout - policy invoc"):
-                # ALGO LOGIC: action logic
-                action, logprob, _, value = policy(obs)
+            # ALGO LOGIC: action logic
+            action, logprob, _, value = policy(obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            with timeit("rollout step"):
-                next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
+            next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            with timeit("rollout - tc create"):
-                ts.append(
+            ts.append(
                     Transitions(
                     obs=obs,
                     dones=done,
@@ -343,10 +345,9 @@ if __name__ == "__main__":
                 )
             )
 
-            with timeit("rollout - cast tensors"):
-                next_obs = torch.tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
-                next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
-                obs, done = next_obs, next_done
+            next_obs = torch.tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
+            next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
+            obs, done = next_obs, next_done
 
             # TODO
             # for idx, d in enumerate(next_done):
@@ -357,19 +358,14 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
-        with timeit("tc stack"):
-            container = torch.stack(ts, 0)
+        container = torch.stack(ts, 0)
         return global_step, next_obs, next_done, container
 
 
-    policy = agent_inference.get_action_and_value
-    get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        policy = torch.compile(policy, mode="reduce-overhead")
-        # get_value = torch.compile(get_value, mode="reduce-overhead")
-        # rollout = torch.compile(rollout, mode="reduce-overhead")
+        rollout = torch.compile(rollout, mode="reduce-overhead")
         if args.cudagraphs:
             # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
@@ -388,12 +384,9 @@ if __name__ == "__main__":
         #     optimizer.param_groups[0]["lr"] = lrnow
 
         torch.compiler.cudagraph_mark_step_begin()
-        with timeit("rollout") if global_step_burnin is not None else contextlib.nullcontext():
-            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        with timeit("gae") if global_step_burnin is not None else contextlib.nullcontext():
-            container = gae(next_obs, next_done, container)
-        with timeit("view") if global_step_burnin is not None else contextlib.nullcontext():
-            container_flat = container.view(-1)
+        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        container = gae(next_obs, next_done, container)
+        container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
@@ -404,23 +397,21 @@ if __name__ == "__main__":
             for start, c in zip(range(0, args.batch_size, args.minibatch_size), containers):
                 end = start + args.minibatch_size
 
-                with timeit("update tc") if global_step_burnin is not None else contextlib.nullcontext():
-                    if container_local is None:
-                       container_local = c.clone()
-                    else:
-                        container_local.update_(c)
+                if container_local is None:
+                   container_local = c.clone()
+                else:
+                    container_local.update_(c)
 
-                with timeit("update") if global_step_burnin is not None else contextlib.nullcontext():
-                    if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
-                        # Run a first time without capture
+                if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
+                    # Run a first time without capture
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
+                elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
+                    # Run a second time with capture
+                    with torch.cuda.graph(graph_update):
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                    elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                        # Run a second time with capture
-                        with torch.cuda.graph(graph_update):
-                            approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                    else:
-                        # Run captured graph
-                        graph_update.replay()
+                else:
+                    # Run captured graph
+                    graph_update.replay()
 
                 # TODO
                 # clipfracs += [clipfrac.clone()]
