@@ -207,7 +207,7 @@ if __name__ == "__main__":
     envs.num_envs = args.num_envs
     envs.single_action_space = envs.action_space
     envs.single_observation_space = envs.observation_space
-    # envs = RecordEpisodeStatistics(envs)
+    envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
     agent = Agent(envs, device=device)
