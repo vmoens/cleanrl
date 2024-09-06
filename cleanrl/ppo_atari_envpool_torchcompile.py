@@ -335,16 +335,18 @@ if __name__ == "__main__":
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            ts.append(Transitions(
-                obs=obs,
-                dones=done,
-                vals=value.flatten(),
-                actions=action,
-                logprobs=logprob,
-                rewards=reward.reshape(-1),
-                device=device,
-                batch_size=(args.num_envs,)
-            ))
+            ts.append(
+                Transitions(
+                    obs=obs,
+                    dones=done,
+                    vals=value.flatten(),
+                    actions=action,
+                    logprobs=logprob,
+                    rewards=reward.reshape(-1),
+                    device=device,
+                    batch_size=(args.num_envs,)
+                )
+            )
 
             next_obs = torch.tensor(next_obs, dtype=torch.float).to(device=device, non_blocking=True)
             next_done = torch.tensor(next_done, dtype=torch.bool).to(device=device, non_blocking=True)
