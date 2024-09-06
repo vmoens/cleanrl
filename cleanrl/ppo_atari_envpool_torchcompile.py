@@ -304,7 +304,7 @@ if __name__ == "__main__":
             action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs_np, reward, next_done = step_func(action)
+            next_obs, reward, next_done = step_func(action)
 
             ts.append(
                 tensordict.TensorDict(
@@ -318,7 +318,7 @@ if __name__ == "__main__":
                 )
             )
 
-            next_obs.copy_(next_obs_np, non_blocking=True)
+            next_obs = next_obs.to(non_blocking=True)
             next_done = next_done.to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
