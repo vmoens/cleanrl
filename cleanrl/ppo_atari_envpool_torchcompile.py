@@ -353,6 +353,7 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         container = torch.stack(ts, 0)
+        container = gae(next_obs, next_done, container)
         return global_step, next_obs, next_done, container
 
 
@@ -383,7 +384,6 @@ if __name__ == "__main__":
 
         torch.compiler.cudagraph_mark_step_begin()
         global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        container = gae(next_obs, next_done, container)
         container_flat = container.view(-1)
 
         # Optimizing the policy and value network
