@@ -304,6 +304,7 @@ if __name__ == "__main__":
 
     if args.compile or args.cudagraphs:
         gae = torch.compile(gae, fullgraph=True)
+        policy = torch.compile(policy, fullgraph=True)
 
     def rollout(global_step, obs, done):
         ts = []
