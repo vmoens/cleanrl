@@ -327,8 +327,8 @@ if __name__ == "__main__":
         next_done = next_done.to(device, non_blocking=True)
         return next_obs, next_done, container
 
-    if args.compile:
-        rollout = torch.compile(rollout)
+    # if args.compile:
+    #     rollout = torch.compile(rollout)
 
     def update(obs, actions, logprobs, advantages, returns, vals):
         optimizer.zero_grad()
