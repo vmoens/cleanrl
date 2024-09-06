@@ -292,8 +292,8 @@ if __name__ == "__main__":
     get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
-        policy = torch.compile(policy, fullgraph=True, mode="reduce-overhead")
-        get_value = torch.compile(get_value, fullgraph=True, mode="reduce-overhead")
+        policy = torch.compile(policy, fullgraph=True)
+        get_value = torch.compile(get_value, fullgraph=True)
 
 
     def gae(next_obs, next_done, container):
@@ -317,8 +317,7 @@ if __name__ == "__main__":
 
 
     if args.compile or args.cudagraphs:
-        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
-
+        gae = torch.compile(gae, fullgraph=True)
 
     def rollout(global_step, obs, done):
         ts = []
@@ -347,15 +346,6 @@ if __name__ == "__main__":
             next_done = torch.tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
-            # TODO
-            # for idx, d in enumerate(next_done):
-            #     if d and info["lives"][idx] == 0:
-            #         avg_returns.append(info["r"][idx])
-            # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
-            # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
-            # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
-            # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
-
         container = torch.stack(ts, 0)
         return global_step, next_obs, next_done, container
 
@@ -363,7 +353,7 @@ if __name__ == "__main__":
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        rollout = torch.compile(rollout, mode="reduce-overhead")
+        rollout = torch.compile(rollout)
         if args.cudagraphs:
             # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
