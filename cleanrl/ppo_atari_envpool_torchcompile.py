@@ -381,6 +381,7 @@ if __name__ == "__main__":
         #     lrnow = frac * args.learning_rate
         #     optimizer.param_groups[0]["lr"] = lrnow
 
+        torch.compiler.cudagraph_mark_step_begin()
         global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
         container = gae(next_obs, next_done, container)
         container_flat = container.view(-1)
