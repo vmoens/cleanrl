@@ -428,7 +428,9 @@ if __name__ == "__main__":
                     out = update(container_local, tensordict_out=tensordict.TensorDict())
 
         if global_step_burnin is not None:
-            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps\treward: {container['rewards'].mean():4.4f}")
+            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps, "
+                                 f"reward avg: {container['rewards'].mean():4.4f}, "
+                                 f"reward max: {container['rewards'].max():4.4f}")
             if iteration % 10 == 0:
                 timeit.print()
 
