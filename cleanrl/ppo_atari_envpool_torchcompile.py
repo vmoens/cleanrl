@@ -242,13 +242,8 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
 
-    def update(container: Transitions):
-        b_obs_mb_inds = container.obs
-        b_actions_mb_inds = container.actions
-        b_logprobs_mb_inds = container.logprobs
-        b_advantages_mb_inds = container.advantages
-        b_returns_mb_inds = container.returns
-        b_values_mb_inds = container.vals
+    def update(b_obs_mb_inds, b_actions_mb_inds, b_logprobs_mb_inds, b_advantages_mb_inds, b_returns_mb_inds,
+               b_values_mb_inds):
 
         optimizer.zero_grad()
         _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
@@ -401,6 +396,13 @@ if __name__ == "__main__":
                    container_local = c.clone()
                 else:
                     container_local.update_(c)
+
+                b_obs_mb_inds = container_local.obs
+                b_actions_mb_inds = container_local.actions
+                b_logprobs_mb_inds = container_local.logprobs
+                b_advantages_mb_inds = container_local.advantages
+                b_returns_mb_inds = container_local.returns
+                b_values_mb_inds = container_local.vals
 
                 if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
                     # Run a first time without capture
