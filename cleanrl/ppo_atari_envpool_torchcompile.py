@@ -244,7 +244,7 @@ if __name__ == "__main__":
     @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
-        return torch.tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
+        return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done)
 
     @step_func.register_fake
     def _(action):
@@ -313,13 +313,13 @@ if __name__ == "__main__":
                     vals=value.flatten(),
                     actions=action,
                     logprobs=logprob,
-                    rewards=torch.as_tensor(reward).reshape(-1),
+                    rewards=reward,
                     batch_size=(args.num_envs,)
                 )
             )
 
-            next_obs.copy_(torch.as_tensor(next_obs_np, dtype=torch.uint8), non_blocking=True)
-            next_done = torch.as_tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
+            next_obs.copy_(next_obs_np, non_blocking=True)
+            next_done = next_done.to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
         container = torch.stack(ts, 0).to(device)
