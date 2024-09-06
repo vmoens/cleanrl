@@ -228,6 +228,7 @@ if __name__ == "__main__":
         dones: torch.Tensor
         vals: torch.Tensor
         advantages: torch.Tensor
+        returns: torch.Tensor | None = None
 
 
     container = Transitions(
