@@ -356,9 +356,9 @@ if __name__ == "__main__":
                     # writer.add_scalar("charts/episodic_length", info["l"][idx], global_step)
 
         # torch.stack(ts, 0, out=container)
-        container.update_(torch.stack(ts, 0))
-        gae(next_obs, next_done, container)
-        return global_step, next_obs, next_done
+        new_container = torch.stack(ts, 0)
+        gae(next_obs, next_done, new_container)
+        return global_step, next_obs, next_done, new_container
 
 
     policy = agent_inference.get_action_and_value
@@ -393,8 +393,8 @@ if __name__ == "__main__":
         #     lrnow = frac * args.learning_rate
         #     optimizer.param_groups[0]["lr"] = lrnow
 
-        global_step, next_obs, next_done = rollout(global_step, next_obs, next_done)
-
+        global_step, next_obs, next_done, new_container = rollout(global_step, next_obs, next_done)
+        container.update_(new_container)
         # Optimizing the policy and value network
         clipfracs = []
         for epoch in range(args.update_epochs):
