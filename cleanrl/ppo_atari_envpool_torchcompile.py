@@ -293,6 +293,12 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
+    policy = agent_inference.get_action_and_value
+    get_value = agent_inference.get_value
+    if args.compile or args.cudagraphs:
+        args.compile = True
+        policy = torch.compile(policy, fullgraph=True, mode="reduce-overhead")
+        get_value = torch.compile(get_value, fullgraph=True, mode="reduce-overhead")
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
@@ -313,13 +319,8 @@ if __name__ == "__main__":
         container.returns = container.advantages + container.vals
         return container
 
-    policy = agent_inference.get_action_and_value
-    get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
-        args.compile = True
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
-        policy = torch.compile(policy, fullgraph=True, mode="reduce-overhead")
-        get_value = torch.compile(get_value, fullgraph=True, mode="reduce-overhead")
 
     def rollout(global_step, obs, done):
         ts = []
