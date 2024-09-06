@@ -322,14 +322,15 @@ if __name__ == "__main__":
         for step in range(0, args.num_steps):
             global_step += args.num_envs
 
-            # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(obs)
+            with timeit("rollout - policy invoc"):
+                # ALGO LOGIC: action logic
+                action, logprob, _, value = policy(obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
             with timeit("rollout step"):
                 next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            with timeit("tc create"):
+            with timeit("rollout - tc create"):
                 ts.append(
                     Transitions(
                     obs=obs,
@@ -343,14 +344,15 @@ if __name__ == "__main__":
                 )
             )
 
-            next_obs = torch.tensor(next_obs, dtype=torch.float, device=device)
-            next_done = torch.tensor(next_done, dtype=torch.bool, device=device)
-            obs, done = next_obs, next_done
+            with timeit("rollout - cast tensors"):
+                next_obs = torch.tensor(next_obs, dtype=torch.float, device=device)
+                next_done = torch.tensor(next_done, dtype=torch.bool, device=device)
+                obs, done = next_obs, next_done
 
-            for idx, d in enumerate(next_done):
-                if d and info["lives"][idx] == 0:
-                    avg_returns.append(info["r"][idx])
-                    # TODO
+            # TODO
+            # for idx, d in enumerate(next_done):
+            #     if d and info["lives"][idx] == 0:
+            #         avg_returns.append(info["r"][idx])
                     # print(f"global_step={global_step}, episodic_return={info['r'][idx]}")
                     # writer.add_scalar("charts/avg_episodic_return", np.average(avg_returns), global_step)
                     # writer.add_scalar("charts/episodic_return", info["r"][idx], global_step)
@@ -366,7 +368,7 @@ if __name__ == "__main__":
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        # policy = torch.compile(policy, mode="reduce-overhead")
+        policy = torch.compile(policy, mode="reduce-overhead")
         # get_value = torch.compile(get_value, mode="reduce-overhead")
         # rollout = torch.compile(rollout, mode="reduce-overhead")
         if args.cudagraphs:
