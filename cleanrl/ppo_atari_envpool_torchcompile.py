@@ -282,6 +282,14 @@ if __name__ == "__main__":
     get_value = agent_inference.get_value
     if args.compile or args.cudagraphs:
         args.compile = True
+        if args.cudagraphs:
+            policy = torch.compile(policy)
+            for _ in range(3):
+                policy(next_obs)
+            graph_policy = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph_policy):
+                action, logprob, _, value = policy(next_obs)
+            out_policy = tensordict.TensorDict({"action": action, "logprob": logprob, "value": value})
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
@@ -304,7 +312,6 @@ if __name__ == "__main__":
 
     if args.compile or args.cudagraphs:
         gae = torch.compile(gae, fullgraph=True)
-        policy = torch.compile(policy, fullgraph=True)
 
     def rollout(global_step, obs, done):
         ts = []
@@ -312,17 +319,21 @@ if __name__ == "__main__":
             global_step += args.num_envs
 
             # ALGO LOGIC: action logic
-            with timeit("0. rollout - 0. policy"):
+            if args.cudagraphs:
+                graph_policy.replay()
+                op = out_policy.clone()
+                action = op["action"]
+                logprob = op["logprob"]
+                value = op["value"]
+            else:
                 action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            with timeit("0. rollout - 1. step"):
-                next_obs, reward, next_done, info = envs.step(action.cpu().numpy())
+            next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
 
-            with timeit("0. rollout - 2. td"):
-                ts.append(
+            ts.append(
                 tensordict.TensorDict(
-                    obs=obs,
+                    obs=obs.clone(),
                     dones=done,
                     vals=value.flatten(),
                     actions=action,
@@ -332,9 +343,8 @@ if __name__ == "__main__":
                 )
             )
 
-            with timeit("0. rollout - 3. to"):
-                next_obs = torch.as_tensor(next_obs, dtype=torch.uint8).to(device, non_blocking=True)
-                next_done = torch.as_tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
+            next_obs.copy_(torch.as_tensor(next_obs_np, dtype=torch.uint8), non_blocking=True)
+            next_done = torch.as_tensor(next_done, dtype=torch.bool).to(device, non_blocking=True)
             obs, done = next_obs, next_done
 
         container = torch.stack(ts, 0).to(device)
@@ -346,7 +356,6 @@ if __name__ == "__main__":
         update = torch.compile(update)
         # rollout = torch.compile(rollout)
         if args.cudagraphs:
-            # graph_policy = torch.cuda.CUDAGraph()
             graph_update = torch.cuda.CUDAGraph()
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
@@ -357,12 +366,9 @@ if __name__ == "__main__":
             start_time = time.time()
 
         torch.compiler.cudagraph_mark_step_begin()
-        with timeit("0. rollout"):
-            global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
-        with timeit("1. gae"):
-            container = gae(next_obs, next_done, container)
-        with timeit("2. view"):
-            container_flat = container.view(-1)
+        global_step, next_obs, next_done, container = rollout(global_step, next_obs, next_done)
+        container = gae(next_obs, next_done, container)
+        container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
@@ -372,39 +378,37 @@ if __name__ == "__main__":
             for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                with timeit("3. flip"):
-                    if container_local is None:
-                        container_local = container_flat[b].clone()
-                        b_obs_mb_inds = container_local["obs"]
-                        b_actions_mb_inds = container_local["actions"]
-                        b_logprobs_mb_inds = container_local["logprobs"]
-                        b_advantages_mb_inds = container_local["advantages"]
-                        b_returns_mb_inds = container_local["returns"]
-                        b_values_mb_inds = container_local["vals"]
-                    else:
-                        container_local.update_(container_flat[b])
+                if container_local is None:
+                    container_local = container_flat[b].clone()
+                    b_obs_mb_inds = container_local["obs"]
+                    b_actions_mb_inds = container_local["actions"]
+                    b_logprobs_mb_inds = container_local["logprobs"]
+                    b_advantages_mb_inds = container_local["advantages"]
+                    b_returns_mb_inds = container_local["returns"]
+                    b_values_mb_inds = container_local["vals"]
+                else:
+                    container_local.update_(container_flat[b])
 
-                with timeit("4. update"):
-                    if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
-                        # Run a first time without capture
+                if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
+                    # Run a first time without capture
+                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
+                                                                                               b_actions_mb_inds,
+                                                                                               b_logprobs_mb_inds,
+                                                                                               b_advantages_mb_inds,
+                                                                                               b_returns_mb_inds,
+                                                                                               b_values_mb_inds)
+                elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
+                    # Run a second time with capture
+                    with torch.cuda.graph(graph_update):
                         approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
                                                                                                    b_actions_mb_inds,
                                                                                                    b_logprobs_mb_inds,
                                                                                                    b_advantages_mb_inds,
                                                                                                    b_returns_mb_inds,
                                                                                                    b_values_mb_inds)
-                    elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                        # Run a second time with capture
-                        with torch.cuda.graph(graph_update):
-                            approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(b_obs_mb_inds,
-                                                                                                       b_actions_mb_inds,
-                                                                                                       b_logprobs_mb_inds,
-                                                                                                       b_advantages_mb_inds,
-                                                                                                       b_returns_mb_inds,
-                                                                                                       b_values_mb_inds)
-                    else:
-                        # Run captured graph
-                        graph_update.replay()
+                else:
+                    # Run captured graph
+                    graph_update.replay()
 
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
