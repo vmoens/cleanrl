@@ -260,58 +260,7 @@ if __name__ == "__main__":
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
     next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
-    def update(container_local):
-        b_obs_mb_inds = container_local["obs"]
-        b_actions_mb_inds = container_local["actions"]
-        b_logprobs_mb_inds = container_local["logprobs"]
-        b_advantages_mb_inds = container_local["advantages"]
-        b_returns_mb_inds = container_local["returns"]
-        b_values_mb_inds = container_local["vals"]
-
-        optimizer.zero_grad()
-        _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_mb_inds, b_actions_mb_inds)
-        logratio = newlogprob - b_logprobs_mb_inds
-        ratio = logratio.exp()
-
-        with torch.no_grad():
-            # calculate approx_kl http://joschu.net/blog/kl-approx.html
-            old_approx_kl = (-logratio).mean()
-            approx_kl = ((ratio - 1) - logratio).mean()
-            clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
-
-        mb_advantages = b_advantages_mb_inds
-        if args.norm_adv:
-            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-        # Policy loss
-        pg_loss1 = -mb_advantages * ratio
-        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-        # Value loss
-        newvalue = newvalue.view(-1)
-        if args.clip_vloss:
-            v_loss_unclipped = (newvalue - b_returns_mb_inds) ** 2
-            v_clipped = b_values_mb_inds + torch.clamp(
-                newvalue - b_values_mb_inds,
-                -args.clip_coef,
-                args.clip_coef,
-            )
-            v_loss_clipped = (v_clipped - b_returns_mb_inds) ** 2
-            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            v_loss = 0.5 * v_loss_max.mean()
-        else:
-            v_loss = 0.5 * ((newvalue - b_returns_mb_inds) ** 2).mean()
-
-        entropy_loss = entropy.mean()
-        loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
-
-        loss.backward()
-        nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-        optimizer.step()
-        return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
-
-    # Define networks
+    # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
     policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
     get_value = agent_inference.get_value
 
@@ -375,12 +324,56 @@ if __name__ == "__main__":
         return global_step, next_obs, next_done, container
 
 
+    def update(obs, actions, logprobs, advantages, returns, vals):
+        optimizer.zero_grad()
+        _, newlogprob, entropy, newvalue = agent.get_action_and_value(obs, actions)
+        logratio = newlogprob - logprobs
+        ratio = logratio.exp()
+
+        with torch.no_grad():
+            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+            old_approx_kl = (-logratio).mean()
+            approx_kl = ((ratio - 1) - logratio).mean()
+            clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
+
+        mb_advantages = advantages
+        if args.norm_adv:
+            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+        # Policy loss
+        pg_loss1 = -mb_advantages * ratio
+        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+        # Value loss
+        newvalue = newvalue.view(-1)
+        if args.clip_vloss:
+            v_loss_unclipped = (newvalue - returns) ** 2
+            v_clipped = vals + torch.clamp(
+                newvalue - vals,
+                -args.clip_coef,
+                args.clip_coef,
+            )
+            v_loss_clipped = (v_clipped - returns) ** 2
+            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+            v_loss = 0.5 * v_loss_max.mean()
+        else:
+            v_loss = 0.5 * ((newvalue - returns) ** 2).mean()
+
+        entropy_loss = entropy.mean()
+        loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+        loss.backward()
+        nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+        optimizer.step()
+        return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
+
+    update = tensordict.nn.TensorDictModule(update, in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"], out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"])
     if args.compile or args.cudagraphs:
         args.compile = True
         update = torch.compile(update)
-        # rollout = torch.compile(rollout)
         if args.cudagraphs:
-            graph_update = torch.cuda.CUDAGraph()
+            update = CudaGraphCompiledModule(update)
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
@@ -407,16 +400,7 @@ if __name__ == "__main__":
                 else:
                     container_local.update_(container_flat[b])
 
-                if not args.cudagraphs or (iteration == 1 and epoch == 0 and start == 0):
-                    # Run a first time without capture
-                    approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                elif iteration == 1 and epoch == 0 and start == args.minibatch_size and args.cudagraphs:
-                    # Run a second time with capture
-                    with torch.cuda.graph(graph_update):
-                        approx_kl, v_loss, pg_loss, entropy_loss, old_approx_kl, clipfrac = update(container_local)
-                else:
-                    # Run captured graph
-                    graph_update.replay()
+                out = update(container_local)
 
         if global_step_burnin is not None:
             pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.4f} sps")
