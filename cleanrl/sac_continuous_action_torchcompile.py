@@ -17,7 +17,7 @@ import tyro
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 from tensordict import from_modules, TensorDict
 from torch.utils.tensorboard import SummaryWriter
-
+import tensordict
 
 @dataclass
 class Args:
@@ -72,6 +72,35 @@ class Args:
     measure_burnin: int = 3
     """Number of burn-in iterations for speed measure."""
 
+
+class CudaGraphCompiledModule:
+    def __init__(self, module, warmup=2):
+        self.module = module
+        self.counter = 0
+        self.warmup = warmup
+        if hasattr(module, "in_keys"):
+            self.in_keys = module.in_keys
+        if hasattr(module, "out_keys"):
+            self.out_keys = module.out_keys
+
+    @tensordict.nn.dispatch(auto_batch_size=False)
+    def __call__(self, tensordict, *args, **kwargs):
+        if self.counter < self.warmup:
+            out = self.module(tensordict, *args, **kwargs)
+            self.counter += 1
+            return out
+        elif self.counter == self.warmup:
+            self.graph = torch.cuda.CUDAGraph()
+            self._tensordict = tensordict
+            with torch.cuda.graph(self.graph):
+                out = self.module(tensordict, *args, **kwargs)
+            self._out = out
+            self.counter += 1
+            return out
+        else:
+            self._tensordict.update_(tensordict)
+            self.graph.replay()
+            return self._out.clone() if self._out is not None else None
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
@@ -269,9 +298,14 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             a_optimizer.step()
         return alpha
 
-    if args.compile:
+    if args.compile or args.cudagraphs:
+        args.compile = True
         update_main = torch.compile(update_main)
         update_pol = torch.compile(update_pol)
+        if args.cudagraphs:
+            update_main = CudaGraphCompiledModule(update_main)
+            update_pol = CudaGraphCompiledModule(update_pol)
+
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
