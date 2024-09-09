@@ -238,8 +238,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 r = float(info['episode']['r'])
                 max_ep_ret = max(max_ep_ret, r)
                 desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
-                # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
@@ -304,19 +302,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 100 == 0:
-                # writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
-                # writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
-                # writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
-                # writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
-                # writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                # writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-                # writer.add_scalar("losses/alpha", alpha, global_step)
-                if start_time is not None:
-                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, " + desc)
-                # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-                # if args.autotune:
-                #     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+            if global_step % 100 == 0 and start_time is not None:
+                pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, " + desc)
 
     envs.close()
     writer.close()

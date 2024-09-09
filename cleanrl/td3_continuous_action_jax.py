@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import tqdm
 import tyro
 from flax.training.train_state import TrainState
 from stable_baselines3.common.buffers import ReplayBuffer
@@ -260,8 +261,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         )
         return actor_state, (qf1_state, qf2_state), actor_loss_value
 
-    start_time = time.time()
-    for global_step in range(args.total_timesteps):
+    pbar = tqdm.tqdm(range(args.total_timesteps))
+    start_time = None
+    max_ep_ret = -float("inf")
+
+    for global_step in pbar:
+        if global_step == args.measure_burnin + args.learning_starts:
+            start_time = time.time()
+            measure_burnin = global_step
+
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
@@ -282,9 +290,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                r = float(info['episode']['r'][0])
+                max_ep_ret = max(max_ep_ret, r)
+                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
                 break
 
         # TRY NOT TO MODIFY: save data to replay buffer; handle `final_observation`
@@ -322,47 +330,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 )
 
             if global_step % 100 == 0:
-                writer.add_scalar("losses/qf1_loss", qf1_loss_value.item(), global_step)
-                writer.add_scalar("losses/qf2_loss", qf2_loss_value.item(), global_step)
-                writer.add_scalar("losses/qf1_values", qf1_a_values.item(), global_step)
-                writer.add_scalar("losses/qf2_values", qf2_a_values.item(), global_step)
-                writer.add_scalar("losses/actor_loss", actor_loss_value.item(), global_step)
-                print("SPS:", int(global_step / (time.time() - start_time)))
-                writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-
-    if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-        with open(model_path, "wb") as f:
-            f.write(
-                flax.serialization.to_bytes(
-                    [
-                        actor_state.params,
-                        qf1_state.params,
-                        qf2_state.params,
-                    ]
-                )
-            )
-        print(f"model saved to {model_path}")
-        from cleanrl_utils.evals.td3_jax_eval import evaluate
-
-        episodic_returns = evaluate(
-            model_path,
-            make_env,
-            args.env_id,
-            eval_episodes=10,
-            run_name=f"{run_name}-eval",
-            Model=(Actor, QNetwork),
-            exploration_noise=args.exploration_noise,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
-
-        if args.upload_model:
-            from cleanrl_utils.huggingface import push_to_hub
-
-            repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "TD3", f"runs/{run_name}", f"videos/{run_name}-eval")
+                if start_time is not None:
+                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, "+desc)
 
     envs.close()
     writer.close()
