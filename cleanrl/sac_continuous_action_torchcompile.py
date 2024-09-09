@@ -316,7 +316,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
-            policy = CudaGraphCompiledModule(policy)
+            # policy = CudaGraphCompiledModule(policy)
 
 
     # TRY NOT TO MODIFY: start the game
