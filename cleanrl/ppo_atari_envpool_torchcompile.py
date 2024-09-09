@@ -308,10 +308,12 @@ if __name__ == "__main__":
         ts = []
         for step in range(args.num_steps):
             # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(obs=obs)
+            with timeit("rollout - policy"):
+                action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done, info = step_func(action)
+            with timeit("rollout - step"):
+                next_obs, reward, next_done, info = step_func(action)
 
             if get_returns:
                 idx = next_done & info["lives"] == 0
