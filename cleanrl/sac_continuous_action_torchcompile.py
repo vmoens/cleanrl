@@ -240,7 +240,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         qf1_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
         qf2_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
         qnet_params = from_modules(qf1, qf2, as_module=True)
-        print('qnet_params', qnet_params)
         qnet_target = from_modules(qf1_target, qf2_target).data
         qnet_target.update_(qnet_params.data)
         # discard params of net
@@ -348,14 +347,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
-        real_next_obs = next_obs.copy()
+        next_obs = torch.as_tensor(next_obs, device=device, dtype=torch.float)
+        real_next_obs = next_obs.clone()
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
-        obs =
+        # obs = torch.as_tensor(obs, device=device, dtype=torch.float)
         transition = TensorDict(
             observations=obs,
-            next_observations=torch.as_tensor(real_next_obs, device=device, dtype=torch.float),
+            next_observations=real_next_obs,
             actions=torch.as_tensor(actions, device=device, dtype=torch.float),
             rewards=torch.as_tensor(rewards, device=device, dtype=torch.float),
             terminations=terminations,
