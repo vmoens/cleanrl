@@ -248,6 +248,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     def update_main(data, policy_noise = args.policy_noise, noise_clip=args.noise_clip, action_scale=target_actor.action_scale):
         with torch.no_grad():
+            data["noise"] = torch.randn_like(data["actions"], device=device)
             clipped_noise = data["noise"].mul_(policy_noise).clamp_(
                 -noise_clip, noise_clip
             ).mul_(action_scale)
@@ -348,7 +349,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
             # TODO: assess this
-            data["noise"] = torch.randn_like(data["actions"], device=device)
             update_main(data)
             if global_step % args.policy_frequency == 0:
                 update_pol(data)
