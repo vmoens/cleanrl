@@ -13,6 +13,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
+from tensordict.nn import TensorDictModule
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 from tensordict import TensorDict, from_module, from_modules
 from torch.utils.tensorboard import SummaryWriter
@@ -288,7 +289,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
-            actor_detach = CudaGraphCompiledModule(actor_detach, in_keys=["obs"], out_keys=["action"])
+            actor_detach = CudaGraphCompiledModule(TensorDictModule(actor_detach, in_keys=["obs"], out_keys=["action"]))
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
