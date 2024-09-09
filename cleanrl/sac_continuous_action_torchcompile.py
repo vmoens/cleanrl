@@ -13,9 +13,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
+from tensordict.nn import TensorDictModule
 # from stable_baselines3.common.buffers import ReplayBuffer
 from torchrl.data import ReplayBuffer, LazyTensorStorage
-from tensordict import from_modules, TensorDict
+from tensordict import from_modules, TensorDict, from_module
 from torch.utils.tensorboard import SummaryWriter
 import tensordict
 
@@ -74,11 +75,21 @@ class Args:
 
 
 class CudaGraphCompiledModule:
-    def __init__(self, module, warmup=2):
+    def __init__(self, module, warmup=2, in_keys=None, out_keys=None):
         self.module = module
         self.counter = 0
         self.warmup = warmup
+        if hasattr(module, "in_keys"):
+            self.in_keys = module.in_keys
+        else:
+            self.in_keys = in_keys if in_keys is not None else []
+        if hasattr(module, "out_keys"):
+            self.out_keys = module.out_keys
+        else:
+            self.out_keys = out_keys if out_keys is not None else []
 
+
+    @tensordict.nn.dispatch(auto_batch_size=False)
     def __call__(self, tensordict, *args, **kwargs):
         if self.counter < self.warmup:
             out = self.module(tensordict, *args, **kwargs)
@@ -218,6 +229,11 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     max_action = float(envs.single_action_space.high[0])
 
     actor = Actor(envs, device=device, n_act=n_act, n_obs=n_obs)
+    actor_detach = Actor(envs, device=device, n_act=n_act, n_obs=n_obs)
+    # Copy params to actor_detach without grad
+    from_module(actor).data.to_module(actor_detach)
+    policy = TensorDictModule(actor_detach.get_action, in_keys=["observation"], out_keys=["action", "_", "_"])
+
     def get_q_params():
         qf1 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
         qf2 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
@@ -297,9 +313,11 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         args.compile = True
         update_main = torch.compile(update_main)
         update_pol = torch.compile(update_pol)
+        policy = torch.compile(policy)
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
+            policy = CudaGraphCompiledModule(policy)
 
 
     # TRY NOT TO MODIFY: start the game
@@ -315,8 +333,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
-            actions, _, _ = actor.get_action(torch.Tensor(obs).to(device))
-            actions = actions.detach().cpu().numpy()
+            actions = policy(obs)
+            actions = actions.cpu().numpy()
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
@@ -334,8 +352,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
+        obs =
         transition = TensorDict(
-            observations=torch.as_tensor(obs, device=device, dtype=torch.float),
+            observations=obs,
             next_observations=torch.as_tensor(real_next_obs, device=device, dtype=torch.float),
             actions=torch.as_tensor(actions, device=device, dtype=torch.float),
             rewards=torch.as_tensor(rewards, device=device, dtype=torch.float),
