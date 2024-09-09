@@ -232,7 +232,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     actor_detach = Actor(envs, device=device, n_act=n_act, n_obs=n_obs)
     # Copy params to actor_detach without grad
     from_module(actor).data.to_module(actor_detach)
-    policy = TensorDictModule(actor_detach.get_action, in_keys=["observation"], out_keys=["action", "log_prob", "mean"])
+    policy = TensorDictModule(actor_detach.get_action, in_keys=["observation"], out_keys=["action"])
 
     def get_q_params():
         qf1 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
