@@ -290,8 +290,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         update_pol = torch.compile(update_pol)
         actor_detach = torch.compile(actor_detach)
         if args.cudagraphs:
-            update_main = CudaGraphCompiledModule(update_main)
-            update_pol = CudaGraphCompiledModule(update_pol)
+            update_main = CudaGraphCompiledModule(update_main, warmup=3)
+            update_pol = CudaGraphCompiledModule(update_pol, warmup=3)
             actor_detach = CudaGraphCompiledModule(TensorDictModule(actor_detach, in_keys=["obs"], out_keys=["action"]))
 
     # TRY NOT TO MODIFY: start the game
@@ -347,6 +347,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
+            # TODO: assess this
             data["noise"] = torch.randn_like(data["actions"], device=device)
             update_main(data)
             if global_step % args.policy_frequency == 0:
