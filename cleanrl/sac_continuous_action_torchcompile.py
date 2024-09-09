@@ -248,7 +248,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     qnet_params, qnet_target, qnet = get_q_params()
 
-    print(TensorDict(dict(qnet.named_parameters())))
     q_optimizer = optim.Adam(qnet.parameters(), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
@@ -268,7 +267,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         with params.to_module(qnet):
             vals = qnet(obs, action)
             if next_q_value is not None:
-                loss_val = F.mse_loss(vals, next_q_value)
+                loss_val = F.mse_loss(vals.view(-1), next_q_value)
                 return loss_val
             return vals
 
@@ -279,7 +278,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             next_state_actions, next_state_log_pi, _ = actor.get_action(data["next_observations"])
             qf_next_target = torch.vmap(batched_qf, (0, None, None))(qnet_target, data["next_observations"], next_state_actions)
             min_qf_next_target = qf_next_target.min(dim=0).values - alpha * next_state_log_pi
-            next_q_value = data["rewards"].flatten() + (~data["dones"].flatten()).float() * args.gamma * (min_qf_next_target).view(
+            next_q_value = data["rewards"].flatten() + (~data["dones"].flatten()).float() * args.gamma * min_qf_next_target.view(
                 -1)
 
         qf_a_values = torch.vmap(batched_qf, (0, None, None, None))(qnet_params, data["observations"], data["actions"], next_q_value)
