@@ -78,12 +78,7 @@ class CudaGraphCompiledModule:
         self.module = module
         self.counter = 0
         self.warmup = warmup
-        if hasattr(module, "in_keys"):
-            self.in_keys = module.in_keys
-        if hasattr(module, "out_keys"):
-            self.out_keys = module.out_keys
 
-    @tensordict.nn.dispatch(auto_batch_size=False)
     def __call__(self, tensordict, *args, **kwargs):
         if self.counter < self.warmup:
             out = self.module(tensordict, *args, **kwargs)
