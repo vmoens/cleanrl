@@ -262,7 +262,7 @@ if __name__ == "__main__":
     from_module(agent).detach().to_module(agent_inference)
 
     ####### Optimizer #######
-    optimizer = optim.Adam(agent.parameters(), lr=torch.tensor(args.learning_rate, device=device), eps=1e-5, foreach=True)
+    optimizer = optim.Adam(agent.parameters(), lr=torch.tensor(args.learning_rate, device=device), eps=1e-5)
 
     ####### Executables #######
     # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
