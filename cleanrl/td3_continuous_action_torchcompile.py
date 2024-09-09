@@ -286,7 +286,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         args.compile = True
         update_main = torch.compile(update_main)
         update_pol = torch.compile(update_pol)
-        actor_detach = torch.compile(actor_detach, mode="reduce-overhead")
+        actor_detach = torch.compile(actor_detach)
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
