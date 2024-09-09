@@ -247,7 +247,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             return vals
 
     def update_main(data, policy_noise = args.policy_noise, noise_clip=args.noise_clip, action_scale=target_actor.action_scale):
-        q_optimizer.zero_grad()
         with torch.no_grad():
             clipped_noise = torch.randn_like(data["actions"], device=device).mul_(policy_noise).clamp(
                 -noise_clip, noise_clip
@@ -265,6 +264,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         qf_loss = qf_loss.sum(0)
 
         # optimize the model
+        q_optimizer.zero_grad()
         qf_loss.backward()
         q_optimizer.step()
 
