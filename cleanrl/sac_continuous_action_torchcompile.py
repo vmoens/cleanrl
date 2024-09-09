@@ -344,7 +344,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                r = info['episode']['r']
+                r = float(info['episode']['r'])
                 max_ep_ret = max(max_ep_ret, r)
                 desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
                 # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
