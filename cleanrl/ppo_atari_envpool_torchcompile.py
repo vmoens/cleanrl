@@ -246,7 +246,8 @@ if __name__ == "__main__":
     # Register step as a special op not to graph break
     # @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
+        with timeit("rollout - step - env"):
+            next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
         return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done), info
 
     # @step_func.register_fake
