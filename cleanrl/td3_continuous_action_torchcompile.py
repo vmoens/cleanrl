@@ -154,11 +154,11 @@ class Actor(nn.Module):
             "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32, device=device)
         )
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = torch.tanh(self.fc_mu(x))
-        return x * self.action_scale + self.action_bias
+    def forward(self, obs):
+        obs = F.relu(self.fc1(obs))
+        obs = F.relu(self.fc2(obs))
+        obs = torch.tanh(self.fc_mu(obs))
+        return obs * self.action_scale + self.action_bias
 
 
 if __name__ == "__main__":
@@ -288,7 +288,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
-            actor_detach = CudaGraphCompiledModule(actor_detach)
+            actor_detach = CudaGraphCompiledModule(actor_detach, in_keys=["obs"], out_keys=["action"])
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -305,7 +305,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
         else:
-            actions = actor_detach(obs)
+            actions = actor_detach(obs=obs)
             actions += torch.normal(0, actor.action_scale * args.exploration_noise)
             actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
 
