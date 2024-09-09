@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/sac/#sac_continuous_actionpy
+import math
 import os
 import random
 import time
@@ -12,7 +13,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
-from stable_baselines3.common.buffers import ReplayBuffer
+# from stable_baselines3.common.buffers import ReplayBuffer
+from torchrl.data import ReplayBuffer, LazyTensorStorage
+from tensordict import from_modules, TensorDict
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -63,7 +66,12 @@ class Args:
     autotune: bool = True
     """automatic tuning of the entropy coefficient"""
 
+    compile: bool = False
+    cudagraphs: bool = False
+
     measure_burnin: int = 3
+    """Number of burn-in iterations for speed measure."""
+
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
@@ -81,11 +89,11 @@ def make_env(env_id, seed, idx, capture_video, run_name):
 
 # ALGO LOGIC: initialize agent here:
 class SoftQNetwork(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, n_act, n_obs, device=None):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
+        self.fc1 = nn.Linear(n_act + n_obs, 256, device=device)
+        self.fc2 = nn.Linear(256, 256, device=device)
+        self.fc3 = nn.Linear(256, 1, device=device)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
@@ -100,18 +108,18 @@ LOG_STD_MIN = -5
 
 
 class Actor(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, n_obs, n_act, device=None):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
-        self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.fc1 = nn.Linear(n_obs, 256, device=device)
+        self.fc2 = nn.Linear(256, 256, device=device)
+        self.fc_mean = nn.Linear(256, n_act, device=device)
+        self.fc_logstd = nn.Linear(256, n_act, device=device)
         # action rescaling
         self.register_buffer(
-            "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32, device=device)
         )
         self.register_buffer(
-            "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32)
+            "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32, device=device)
         )
 
     def forward(self, x):
@@ -179,18 +187,30 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     # env setup
     envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
+    n_act = math.prod(envs.single_action_space.shape)
+    n_obs = math.prod(envs.single_observation_space.shape)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     max_action = float(envs.single_action_space.high[0])
 
-    actor = Actor(envs).to(device)
-    qf1 = SoftQNetwork(envs).to(device)
-    qf2 = SoftQNetwork(envs).to(device)
-    qf1_target = SoftQNetwork(envs).to(device)
-    qf2_target = SoftQNetwork(envs).to(device)
-    qf1_target.load_state_dict(qf1.state_dict())
-    qf2_target.load_state_dict(qf2.state_dict())
-    q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
+    actor = Actor(envs, device=device, n_act=n_act, n_obs=n_obs)
+    def get_q_params():
+        qf1 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
+        qf2 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
+        qf1_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
+        qf2_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
+        qnet_params = from_modules(qf1, qf2, as_module=True)
+        print('qnet_params', qnet_params)
+        qnet_target = from_modules(qf1_target, qf2_target).data
+        qnet_target.update_(qnet_params.data)
+        # discard params of net
+        qnet = SoftQNetwork(envs, device="meta", n_act=n_act, n_obs=n_obs)
+        qnet_params.to_module(qnet)
+
+        return qnet_params, qnet_target, qnet
+
+    qnet_params, qnet_target, qnet = get_q_params()
+    q_optimizer = optim.Adam(qnet_params.parameters(), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     # Automatic entropy tuning
@@ -200,17 +220,58 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         alpha = log_alpha.exp().item()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
-        alpha = args.alpha
+        alpha = torch.as_tensor(args.alpha, device=device)
 
     envs.single_observation_space.dtype = np.float32
-    rb = ReplayBuffer(
-        args.buffer_size,
-        envs.single_observation_space,
-        envs.single_action_space,
-        device,
-        handle_timeout_termination=False,
-    )
-    start_time = time.time()
+    rb = ReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
+
+    def batched_qf(params, obs, action, next_q_value=None):
+        with params.to_module(qnet):
+            vals = qnet(obs, action)
+            if next_q_value is not None:
+                loss_val = F.mse_loss(vals, next_q_value)
+                return loss_val
+            return vals
+
+    def update_main(data):
+        with torch.no_grad():
+            next_state_actions, next_state_log_pi, _ = actor.get_action(data["next_observations"])
+            qf_next_target = torch.vmap(batched_qf, (0, None, None))(qnet_target, data["next_observations"], next_state_actions)
+            min_qf_next_target = qf_next_target.min(dim=0).values - alpha * next_state_log_pi
+            next_q_value = data["rewards"].flatten() + (~data["dones"].flatten()).float() * args.gamma * (min_qf_next_target).view(
+                -1)
+
+        qf_a_values = torch.vmap(batched_qf, (0, None, None, None))(qnet_params, data["observations"], data["actions"], next_q_value)
+        qf_loss = qf_a_values.sum(0)
+
+        # optimize the model
+        q_optimizer.zero_grad()
+        qf_loss.backward()
+        q_optimizer.step()
+
+    def update_pol(data):
+        pi, log_pi, _ = actor.get_action(data["observations"])
+        qf_pi = torch.vmap(batched_qf, (0, None, None))(qnet_params.data, data["observations"], pi)
+        min_qf_pi = qf_pi.min(0).values
+        actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+
+        actor_optimizer.zero_grad()
+        actor_loss.backward()
+        actor_optimizer.step()
+
+        if args.autotune:
+            with torch.no_grad():
+                _, log_pi, _ = actor.get_action(data["observations"])
+            alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
+
+            a_optimizer.zero_grad()
+            alpha_loss.backward()
+            a_optimizer.step()
+        return alpha
+
+    if args.compile:
+        update_main = torch.compile(update_main)
+        update_pol = torch.compile(update_pol)
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
@@ -234,7 +295,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                desc = f"global_step={global_step}, episodic_return={info['episode']['r']}"
+                desc  = f"global_step={global_step}, episodic_return={info['episode']['r']}"
                 # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                 # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 break
@@ -244,7 +305,17 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         for idx, trunc in enumerate(truncations):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
-        rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
+        transition = TensorDict(
+            observations=torch.as_tensor(obs, device=device, dtype=torch.float),
+            next_observations=torch.as_tensor(real_next_obs, device=device, dtype=torch.float),
+            actions=torch.as_tensor(actions, device=device, dtype=torch.float),
+            rewards=torch.as_tensor(rewards, device=device, dtype=torch.float),
+            terminations=terminations,
+            dones=terminations,
+            batch_size=obs.shape[0],
+            device=device
+        )
+        rb.extend(transition)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
@@ -252,54 +323,18 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
             data = rb.sample(args.batch_size)
-            with torch.no_grad():
-                next_state_actions, next_state_log_pi, _ = actor.get_action(data.next_observations)
-                qf1_next_target = qf1_target(data.next_observations, next_state_actions)
-                qf2_next_target = qf2_target(data.next_observations, next_state_actions)
-                min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - alpha * next_state_log_pi
-                next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * args.gamma * (min_qf_next_target).view(-1)
-
-            qf1_a_values = qf1(data.observations, data.actions).view(-1)
-            qf2_a_values = qf2(data.observations, data.actions).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = qf1_loss + qf2_loss
-
-            # optimize the model
-            q_optimizer.zero_grad()
-            qf_loss.backward()
-            q_optimizer.step()
-
+            update_main(data)
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
                     args.policy_frequency
                 ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    pi, log_pi, _ = actor.get_action(data.observations)
-                    qf1_pi = qf1(data.observations, pi)
-                    qf2_pi = qf2(data.observations, pi)
-                    min_qf_pi = torch.min(qf1_pi, qf2_pi)
-                    actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
-
-                    actor_optimizer.zero_grad()
-                    actor_loss.backward()
-                    actor_optimizer.step()
-
-                    if args.autotune:
-                        with torch.no_grad():
-                            _, log_pi, _ = actor.get_action(data.observations)
-                        alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
-
-                        a_optimizer.zero_grad()
-                        alpha_loss.backward()
-                        a_optimizer.step()
-                        alpha = log_alpha.exp().item()
+                    update_pol(data)
+                    alpha.copy_(log_alpha.detach().exp())
 
             # update the target networks
             if global_step % args.target_network_frequency == 0:
-                for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
-                for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
-                    target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
+                # lerp is defined as x' = x + w (y-x), which is equivalent to x' = (1-w) x + w y
+                qnet_target.lerp_(qnet_params.data, args.tau)
 
             if global_step % 100 == 0:
                 # writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
@@ -310,7 +345,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 # writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                 # writer.add_scalar("losses/alpha", alpha, global_step)
                 if start_time is not None:
-                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, " + desc)
+                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, "+desc)
                 # writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
                 # if args.autotune:
                 #     writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
