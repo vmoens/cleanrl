@@ -248,13 +248,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     def update_main(data, policy_noise = args.policy_noise, noise_clip=args.noise_clip, action_scale=target_actor.action_scale):
         with torch.no_grad():
-            clipped_noise = torch.randn_like(data["actions"], device=device).mul_(policy_noise).clamp(
-                -noise_clip, noise_clip
-            ).mul_(action_scale)
+            # clipped_noise = torch.randn_like(data["actions"], device=device).mul_(policy_noise).clamp_(
+            #     -noise_clip, noise_clip
+            # ).mul_(action_scale)
+            clipped_noise = torch.randn_like(data["actions"], device=device).mul_(policy_noise).mul_(action_scale)
 
-            next_state_actions = (target_actor(data["next_observations"]) + clipped_noise).clamp(
-                action_low, action_high
-            )
+            # next_state_actions = (target_actor(data["next_observations"]) + clipped_noise).clamp(
+            #     action_low, action_high
+            # )
+            next_state_actions = (target_actor(data["next_observations"]) + clipped_noise)
             qf_next_target = torch.vmap(batched_qf, (0, None, None))(qnet_target_params, data["next_observations"], next_state_actions)
             min_qf_next_target = qf_next_target.min(0).values
             next_q_value = data["rewards"].flatten() + (~data["dones"].flatten()).float() * args.gamma * min_qf_next_target.view(
