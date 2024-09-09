@@ -158,7 +158,7 @@ class Actor(nn.Module):
     def forward(self, obs):
         obs = F.relu(self.fc1(obs))
         obs = F.relu(self.fc2(obs))
-        obs = torch.tanh(self.fc_mu(obs))
+        obs = self.fc_mu(obs).tanh()
         return obs * self.action_scale + self.action_bias
 
 
@@ -204,10 +204,11 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
     n_act = math.prod(envs.single_action_space.shape)
     n_obs = math.prod(envs.single_observation_space.shape)
+    action_low, action_high = float(envs.single_action_space.low[0]), float(envs.single_action_space.high[0])
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     actor = Actor(env=envs, n_obs=n_obs, n_act=n_act, device=device)
-    actor_detach = Actor(env=envs, device=device, n_act=n_act, n_obs=n_obs)
+    actor_detach = Actor(env=envs, n_obs=n_obs, n_act=n_act, device=device)
     # Copy params to actor_detach without grad
     from_module(actor).data.to_module(actor_detach)
 
@@ -245,15 +246,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 return loss_val
             return vals
 
-    def update_main(data):
+    def update_main(data, policy_noise = args.policy_noise, noise_clip=args.noise_clip, action_scale=target_actor.action_scale):
         q_optimizer.zero_grad()
         with torch.no_grad():
-            clipped_noise = (torch.randn_like(data["actions"], device=device) * args.policy_noise).clamp(
-                -args.noise_clip, args.noise_clip
-            ) * target_actor.action_scale
+            clipped_noise = (torch.randn_like(data["actions"], device=device) * policy_noise).clamp(
+                -noise_clip, noise_clip
+            ) * action_scale
 
             next_state_actions = (target_actor(data["next_observations"]) + clipped_noise).clamp(
-                envs.single_action_space.low[0], envs.single_action_space.high[0]
+                action_low, action_high
             )
             qf_next_target = torch.vmap(batched_qf, (0, None, None))(qnet_target_params, data["next_observations"], next_state_actions)
             min_qf_next_target = qf_next_target.min(0).values
@@ -308,7 +309,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         else:
             actions = actor_detach(obs=obs)
             actions += torch.normal(0, actor.action_scale * args.exploration_noise)
-            actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
+            actions = actions.clamp(action_low, action_high).cpu().numpy()
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
