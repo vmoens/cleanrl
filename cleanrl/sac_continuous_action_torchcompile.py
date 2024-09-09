@@ -237,11 +237,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     def get_q_params():
         qf1 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
         qf2 = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
-        qf1_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
-        qf2_target = SoftQNetwork(envs, device=device, n_act=n_act, n_obs=n_obs)
         qnet_params = from_modules(qf1, qf2, as_module=True)
-        qnet_target = from_modules(qf1_target, qf2_target).data
-        qnet_target.update_(qnet_params.data)
+        qnet_target = qnet_params.data.clone()
+
         # discard params of net
         qnet = SoftQNetwork(envs, device="meta", n_act=n_act, n_obs=n_obs)
         qnet_params.to_module(qnet)
@@ -249,7 +247,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         return qnet_params, qnet_target, qnet
 
     qnet_params, qnet_target, qnet = get_q_params()
-    q_optimizer = optim.Adam(qnet_params.parameters(), lr=args.q_lr)
+
+    print(TensorDict(dict(qnet.named_parameters())))
+    q_optimizer = optim.Adam(qnet.parameters(), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
 
     # Automatic entropy tuning
@@ -273,6 +273,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             return vals
 
     def update_main(data):
+        # optimize the model
+        q_optimizer.zero_grad()
         with torch.no_grad():
             next_state_actions, next_state_log_pi, _ = actor.get_action(data["next_observations"])
             qf_next_target = torch.vmap(batched_qf, (0, None, None))(qnet_target, data["next_observations"], next_state_actions)
@@ -283,27 +285,25 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         qf_a_values = torch.vmap(batched_qf, (0, None, None, None))(qnet_params, data["observations"], data["actions"], next_q_value)
         qf_loss = qf_a_values.sum(0)
 
-        # optimize the model
-        q_optimizer.zero_grad()
         qf_loss.backward()
         q_optimizer.step()
 
     def update_pol(data):
+        actor_optimizer.zero_grad()
         pi, log_pi, _ = actor.get_action(data["observations"])
         qf_pi = torch.vmap(batched_qf, (0, None, None))(qnet_params.data, data["observations"], pi)
         min_qf_pi = qf_pi.min(0).values
         actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
 
-        actor_optimizer.zero_grad()
         actor_loss.backward()
         actor_optimizer.step()
 
         if args.autotune:
+            a_optimizer.zero_grad()
             with torch.no_grad():
                 _, log_pi, _ = actor.get_action(data["observations"])
             alpha_loss = (-log_alpha.exp() * (log_pi + target_entropy)).mean()
 
-            a_optimizer.zero_grad()
             alpha_loss.backward()
             a_optimizer.step()
         return alpha
