@@ -216,6 +216,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     obs, _ = envs.reset(seed=args.seed)
     pbar = tqdm.tqdm(range(args.total_timesteps))
     start_time = None
+    max_ep_ret = -float("inf")
     for global_step in pbar:
         if global_step == args.measure_burnin + args.learning_starts:
             start_time = time.time()
@@ -234,7 +235,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                desc = f"global_step={global_step}, episodic_return={info['episode']['r']}"
+                r = float(info['episode']['r'])
+                max_ep_ret = max(max_ep_ret, r)
+                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
                 # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                 # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 break
