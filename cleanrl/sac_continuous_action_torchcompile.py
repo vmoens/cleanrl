@@ -312,7 +312,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         args.compile = True
         update_main = torch.compile(update_main)
         update_pol = torch.compile(update_pol)
-        policy = torch.compile(policy)
+        policy = torch.compile(policy, mode="reduce-overhead")
         if args.cudagraphs:
             update_main = CudaGraphCompiledModule(update_main)
             update_pol = CudaGraphCompiledModule(update_pol)
@@ -324,6 +324,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     obs = torch.as_tensor(obs, device=device, dtype=torch.float)
     pbar = tqdm.tqdm(range(args.total_timesteps))
     start_time = None
+    max_ep_ret = -float("inf")
+
     for global_step in pbar:
         if global_step == args.measure_burnin + args.learning_starts:
             start_time = time.time()
@@ -342,7 +344,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                desc  = f"global_step={global_step}, episodic_return={info['episode']['r']}"
+                r = info['episode']['r']
+                max_ep_ret = max(max_ep_ret, r)
+                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
                 # writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                 # writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 break
