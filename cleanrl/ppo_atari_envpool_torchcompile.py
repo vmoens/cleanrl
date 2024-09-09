@@ -248,7 +248,7 @@ if __name__ == "__main__":
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         with timeit("rollout - step - env"):
             next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
-        return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done), info
+        return torch.as_tensor(next_obs_np).to(device, non_blocking=True), torch.as_tensor(reward).to(device, non_blocking=True), torch.as_tensor(next_done).to(device, non_blocking=True), info
 
     # @step_func.register_fake
     # def _(action):
@@ -332,7 +332,7 @@ if __name__ == "__main__":
                 )
             )
 
-            obs = next_obs = next_obs.to(device, non_blocking=True)
+            obs = next_obs
 
         container = torch.stack(ts, 0).to(device)
         next_done = next_done.to(device, non_blocking=True)
