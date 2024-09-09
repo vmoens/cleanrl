@@ -217,7 +217,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     if args.autotune:
         target_entropy = -torch.prod(torch.Tensor(envs.single_action_space.shape).to(device)).item()
         log_alpha = torch.zeros(1, requires_grad=True, device=device)
-        alpha = log_alpha.exp().item()
+        alpha = log_alpha.detach().exp()
         a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
     else:
         alpha = torch.as_tensor(args.alpha, device=device)
