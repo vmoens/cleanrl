@@ -249,9 +249,9 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     def update_main(data, policy_noise = args.policy_noise, noise_clip=args.noise_clip, action_scale=target_actor.action_scale):
         q_optimizer.zero_grad()
         with torch.no_grad():
-            clipped_noise = (torch.randn_like(data["actions"], device=device) * policy_noise).clamp(
+            clipped_noise = torch.randn_like(data["actions"], device=device).mul_(policy_noise).clamp(
                 -noise_clip, noise_clip
-            ) * action_scale
+            ).mul_(action_scale)
 
             next_state_actions = (target_actor(data["next_observations"]) + clipped_noise).clamp(
                 action_low, action_high
