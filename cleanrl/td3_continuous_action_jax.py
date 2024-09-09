@@ -65,6 +65,7 @@ class Args:
     noise_clip: float = 0.5
     """noise clip parameter of the Target Policy Smoothing Regularization"""
 
+    measure_burnin: int = 3
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
