@@ -300,9 +300,9 @@ if __name__ == "__main__":
         return container
 
     if args.compile:
-        gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
-        # if args.cudagraphs:
-        #     gae = CudaGraphCompiledModule(gae)
+        gae = torch.compile(gae, fullgraph=True)
+        if args.cudagraphs:
+            gae = CudaGraphCompiledModule(TensorDictModule(gae, in_keys=["next_obs", "next_done", "container"], out_keys=["container"]))
 
     def rollout(obs, done, get_returns=False, avg_returns=[]):
         ts = []
