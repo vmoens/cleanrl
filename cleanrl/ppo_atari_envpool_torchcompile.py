@@ -16,6 +16,8 @@ import torch.nn as nn
 import torch.optim as optim
 import tqdm
 import tyro
+from tensordict import from_module
+from tensordict.nn import TensorDictModule
 from torch.distributions.categorical import Categorical, Distribution
 from torch.utils.tensorboard import SummaryWriter
 from tensordict.utils import timeit
@@ -257,14 +259,14 @@ if __name__ == "__main__":
     agent = Agent(envs, device=device)
     # Make a version of agent with detached params
     agent_inference = Agent(envs, device=device)
-    tensordict.TensorDict.from_module(agent).detach().to_module(agent_inference)
+    from_module(agent).detach().to_module(agent_inference)
 
     ####### Optimizer #######
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    optimizer = optim.Adam(agent.parameters(), lr=torch.tensor(args.learning_rate, device=device), eps=1e-5, foreach=True)
 
     ####### Executables #######
     # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
-    policy = tensordict.nn.TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
+    policy = TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
     get_value = agent_inference.get_value
 
     # Compile policy
@@ -299,6 +301,8 @@ if __name__ == "__main__":
 
     if args.compile:
         gae = torch.compile(gae, fullgraph=True, mode="reduce-overhead")
+        # if args.cudagraphs:
+        #     gae = CudaGraphCompiledModule(gae)
 
     def rollout(obs, done, get_returns=False, avg_returns=[]):
         ts = []

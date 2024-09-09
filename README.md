@@ -1,41 +1,29 @@
-# CleanRL (Clean Implementation of RL Algorithms)
+# FastRL - Turbo-implementations of CleanRL scripts 
 
+FastRL is a fork of CleanRL, where selected PyTorch scripts optimized for performance.
+The goal is to provide guidance on how to run your RL script at a speed that fully leverages PyTorch 2.0 and related
+tooling while not compromising on the PyTorch API that made its success.We leverage `torch.compile` and `cudagraphs`
+to achieve an order of magnitude speedup in training times.
 
-[<img src="https://img.shields.io/badge/license-MIT-blue">](https://github.com/vwxyzjn/cleanrl)
-[![tests](https://github.com/vwxyzjn/cleanrl/actions/workflows/tests.yaml/badge.svg)](https://github.com/vwxyzjn/cleanrl/actions/workflows/tests.yaml)
-[![docs](https://img.shields.io/github/deployments/vwxyzjn/cleanrl/Production?label=docs&logo=vercel)](https://docs.cleanrl.dev/)
-[<img src="https://img.shields.io/discord/767863440248143916?label=discord">](https://discord.gg/D6RCjA6sVT)
-[<img src="https://img.shields.io/youtube/channel/views/UCDdC6BIFRI0jvcwuhi3aI6w?style=social">](https://www.youtube.com/channel/UCDdC6BIFRI0jvcwuhi3aI6w/videos)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
-[<img src="https://img.shields.io/badge/%F0%9F%A4%97%20Models-Huggingface-F8D521">](https://huggingface.co/cleanrl)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vwxyzjn/cleanrl/blob/master/docs/get-started/CleanRL_Huggingface_Integration_Demo.ipynb)
-
-
-CleanRL is a Deep Reinforcement Learning library that provides high-quality single-file implementation with research-friendly features. The implementation is clean and simple, yet we can scale it to run thousands of experiments using AWS Batch. The highlight features of CleanRL are:
-
-
-
+## Key Features:
 * 📜 Single-file implementation
-   * *Every detail about an algorithm variant is put into a single standalone file.* 
-   * For example, our `ppo_atari.py` only has 340 lines of code but contains all implementation details on how PPO works with Atari games, **so it is a great reference implementation to read for folks who do not wish to read an entire modular library**.
-* 📊 Benchmarked Implementation (7+ algorithms and 34+ games at https://benchmark.cleanrl.dev)
-* 📈 Tensorboard Logging
+   * We stick to the original spirit of CleanRL which is to keep *every detail about an algorithm variant in a single standalone file.* 
+* 🚀 Fast implementations:
+  * We provide an optimized, lean version of the PyTorch script where data copies and code execution have been
+    optimized thanks to four tools: 
+    * 🖥️ `torch.compile` to reduce the overhead and fuse operators whenever possible;
+    * 📈 `cudagraphs` to isolate all the cuda operations and eliminate the cost of entering the compiled code;
+    * 📖 `tensordict` to speed-up and clarify data copies on CUDA, facilitate functional calls and fast target parameters updates.
+    * 🗺️ `torch.vmap` to vectorize the execution of the Q-value networks, when needed.
+  * We provide a cleaned version of each script removing a bunch of LoC such as logging
+    of certain values to focus on the time spent optimizing the model.
+  * If available, we do the same with the Jax version of the code.
 * 🪛 Local Reproducibility via Seeding
-* 🎮 Videos of Gameplay Capturing
-* 🧫 Experiment Management with [Weights and Biases](https://wandb.ai/site)
-* 💸 Cloud Integration with docker and AWS 
 
-You can read more about CleanRL in our [JMLR paper](https://www.jmlr.org/papers/volume23/21-1342/21-1342.pdf) and [documentation](https://docs.cleanrl.dev/).
-
-CleanRL only contains implementations of **online** deep reinforcement learning algorithms. If you are looking for **offline** algorithms, please check out [corl-team/CORL](https://github.com/corl-team/CORL), which shares a similar design philosophy as CleanRL.
-
-> ℹ️ **Support for Gymnasium**: [Farama-Foundation/Gymnasium](https://github.com/Farama-Foundation/Gymnasium) is the next generation of [`openai/gym`](https://github.com/openai/gym) that will continue to be maintained and introduce new features. Please see their [announcement](https://farama.org/Announcing-The-Farama-Foundation) for further detail. We are migrating to `gymnasium` and the progress can be tracked in [vwxyzjn/cleanrl#277](https://github.com/vwxyzjn/cleanrl/pull/277). 
-
-
-> ⚠️ **NOTE**: CleanRL is *not* a modular library and therefore it is not meant to be imported. At the cost of duplicate code, we make all implementation details of a DRL algorithm variant easy to understand, so CleanRL comes with its own pros and cons. You should consider using CleanRL if you want to 1) understand all implementation details of an algorithm's varaint or 2) prototype advanced features that other modular DRL libraries do not support (CleanRL has minimal lines of code so it gives you great debugging experience and you don't have do a lot of subclassing like sometimes in modular DRL libraries).
 
 ## Get started
+
+Prerequisites:
 
 Prerequisites:
 * Python >=3.7.1,<3.11
