@@ -143,7 +143,7 @@ class QNetwork(nn.Module):
 
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     slope = (end_e - start_e) / duration
-    return max(slope * t + start_e, end_e)
+    return torch.tensor(max(slope * t + start_e, end_e), device=device)
 
 
 if __name__ == "__main__":
@@ -199,7 +199,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     def policy(obs, epsilon):
         # We use torch.where because it frees us from using control flow
-        use_policy = torch.rand(len(obs)) > epsilon
+        use_policy = torch.rand(len(obs), device=device) > epsilon
         q_values = q_network(obs)
         actions = torch.argmax(q_values, dim=1).to(torch.int64)
         actions_random = torch.randint(n_act, actions.shape, device=actions.device)
