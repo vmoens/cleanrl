@@ -253,7 +253,6 @@ if __name__ == "__main__":
         rb.extend(transition)
         return rb.sample(args.batch_size)
 
-    is_extend_compiled = False
     if args.compile or args.cudagraphs:
         args.compile = True
         update_main = torch.compile(update_main)

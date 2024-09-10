@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import tqdm
 import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
 
@@ -63,6 +64,8 @@ class Args:
     train_frequency: int = 10
     """the frequency of training"""
 
+    measure_burnin: int = 3
+    """Number of burn-in iterations for speed measure."""
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
@@ -140,11 +143,15 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         device,
         handle_timeout_termination=False,
     )
-    start_time = time.time()
-    from dataclasses import dataclass
+    start_time = None
+
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
-    for global_step in range(args.total_timesteps):
+    pbar = tqdm.tqdm(range(args.total_timesteps))
+    for global_step in pbar:
+        if global_step == args.learning_starts + args.measure_burnin:
+            start_time = time.time()
+            global_step_start = global_step
 
         # ALGO LOGIC: put action logic here
         epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
@@ -183,9 +190,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 old_val = q_network(data.observations).gather(1, data.actions).squeeze()
                 loss = F.mse_loss(td_target, old_val)
 
-                if global_step % 100 == 0:
-                    print("SPS:", int(global_step / (time.time() - start_time)))
-
                 # optimize the model
                 optimizer.zero_grad()
                 loss.backward()
@@ -198,31 +202,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                         args.tau * q_network_param.data + (1.0 - args.tau) * target_network_param.data
                     )
 
-    if args.save_model:
-        model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-        torch.save(q_network.state_dict(), model_path)
-        print(f"model saved to {model_path}")
-        from cleanrl_utils.evals.dqn_eval import evaluate
-
-        episodic_returns = evaluate(
-            model_path,
-            make_env,
-            args.env_id,
-            eval_episodes=10,
-            run_name=f"{run_name}-eval",
-            Model=QNetwork,
-            device=device,
-            epsilon=0.05,
-        )
-        for idx, episodic_return in enumerate(episodic_returns):
-            writer.add_scalar("eval/episodic_return", episodic_return, idx)
-
-        if args.upload_model:
-            from cleanrl_utils.huggingface import push_to_hub
-
-            repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
-            repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-            push_to_hub(args, episodic_returns, repo_id, "DQN", f"runs/{run_name}", f"videos/{run_name}-eval")
+        if global_step % 100 == 0 and start_time is not None:
+            pbar.set_description(
+                f"speed: {(global_step - global_step_start) / (time.time() - start_time): 4.2f} sps, " + desc)
 
     envs.close()
-    writer.close()
