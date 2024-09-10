@@ -269,6 +269,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
         if global_step % 100 == 0 and start_time is not None:
             pbar.set_description(
-                f"speed: {(global_step - global_step_start) / (time.time() - start_time): 4.2f} sps, " + desc)
+                f"speed: {(global_step - global_step_start) / (time.time() - start_time): 4.2f} sps, epsilon: {epsilon: 4.2.f}, " + desc)
 
     envs.close()
