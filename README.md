@@ -1,6 +1,6 @@
-# FastRL - Turbo-implementations of CleanRL scripts 
+# LeanRL - Turbo-implementations of CleanRL scripts 
 
-FastRL is a fork of CleanRL, where selected PyTorch scripts optimized for performance.
+LeanRL is a fork of CleanRL, where selected PyTorch scripts optimized for performance.
 The goal is to provide guidance on how to run your RL script at a speed that fully leverages PyTorch 2.0 and related
 tooling while not compromising on the PyTorch API that made its success.We leverage `torch.compile` and `cudagraphs`
 to achieve an order of magnitude speedup in training times.
