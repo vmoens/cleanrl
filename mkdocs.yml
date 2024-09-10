@@ -54,13 +54,13 @@ nav:
     - advanced/resume-training.md
   - Community:
     - contribution.md
-    - cleanrl-supported-papers-projects.md
+    - leanrl-supported-papers-projects.md
   - Cloud Integration: 
     - cloud/installation.md
     - cloud/submit-experiments.md
 #adding git repo
 repo_url: https://github.com/vwxyzjn/cleanrl
-repo_name: vwxyzjn/cleanrl
+repo_name: vwxyzjn/leanrl
 #markdown_extensions 
 markdown_extensions:
   - pymdownx.superfences

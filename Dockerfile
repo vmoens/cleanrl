@@ -27,4 +27,4 @@ RUN chmod 777 /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # copy local files
-COPY ./cleanrl /cleanrl
+COPY leanrl /cleanrl

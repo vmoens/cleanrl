@@ -3,7 +3,7 @@ import optuna
 from cleanrl_utils.tuner import Tuner
 
 tuner = Tuner(
-    script="cleanrl/ppo.py",
+    script="leanrl/ppo.py",
     metric="charts/episodic_return",
     metric_last_n_average_window=50,
     direction="maximize",

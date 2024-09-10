@@ -5,7 +5,7 @@ from cleanrl_utils.tuner import Tuner
 
 def test_tuner():
     tuner = Tuner(
-        script="cleanrl/ppo.py",
+        script="leanrl/ppo.py",
         metric="charts/episodic_return",
         metric_last_n_average_window=50,
         direction="maximize",
@@ -25,7 +25,7 @@ def test_tuner():
         },
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5),
         sampler=optuna.samplers.TPESampler(),
-        # wandb_kwargs={"project": "cleanrl"},
+        # wandb_kwargs={"project": "leanrl"},
     )
     tuner.tune(
         num_trials=1,
