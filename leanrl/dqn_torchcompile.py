@@ -195,7 +195,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # We use torch.where because it frees us from using control flow
         q_values = q_network_detach(obs)
         actions = torch.argmax(q_values, dim=1)
-        actions_random = torch.rand_like(actions).mul(n_act).floor().to(torch.long)
+        actions_random = torch.rand(actions.shape, device=actions.device).mul(n_act).floor().to(torch.long)
         # actions_random = torch.randint_like(actions, n_act)
         use_policy = torch.rand_like(actions).gt(epsilon)
         return torch.where(use_policy, actions, actions_random)
