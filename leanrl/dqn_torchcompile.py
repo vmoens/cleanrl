@@ -193,7 +193,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         old_val = q_network(data["observations"]).gather(1, data["actions"].unsqueeze(-1)).squeeze()
         loss = F.mse_loss(td_target, old_val)
 
-
         # optimize the model
         optimizer.zero_grad()
         loss.backward()
@@ -201,10 +200,11 @@ poetry run pip install "stable_baselines3==2.0.0a1"
 
     def policy(obs, epsilon):
         # We use torch.where because it frees us from using control flow
-        use_policy = torch.rand(len(obs), device=device) > epsilon
         q_values = q_network_detach(obs)
         actions = torch.argmax(q_values, dim=1)
-        actions_random = torch.randint(n_act, actions.shape, device=actions.device)
+        actions_random = torch.rand_like(actions).mul_(n_act).floor_().to(torch.long)
+        # actions_random = torch.randint_like(actions, n_act)
+        use_policy = torch.rand_like(actions).gt(epsilon)
         return torch.where(use_policy, actions, actions_random)
 
     rb = ReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
@@ -221,12 +221,14 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             policy = CudaGraphCompiledModule(policy, warmup=3)
         else:
             update = torch.compile(update, mode="reduce-overhead")
+            policy = torch.compile(policy, mode="reduce-overhead", fullgraph=True)
 
     start_time = None
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     obs = torch.as_tensor(obs, device=device, dtype=torch.float)
+
     pbar = tqdm.tqdm(range(args.total_timesteps))
     transitions = []
     for global_step in pbar:
