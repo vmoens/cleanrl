@@ -172,6 +172,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     q_network_detach = QNetwork(n_obs=n_obs, n_act=n_act, device=device)
     params_vals = from_module(q_network).detach()
     params_vals.to_module(q_network_detach)
+
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
 
     target_network = QNetwork(n_obs=n_obs, n_act=n_act, device=device)
@@ -194,7 +195,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # We use torch.where because it frees us from using control flow
         q_values = q_network_detach(obs)
         actions = torch.argmax(q_values, dim=1)
-        actions_random = torch.rand_like(actions).mul_(n_act).floor_().to(torch.long)
+        actions_random = torch.rand_like(actions).mul(n_act).floor().to(torch.long)
         # actions_random = torch.randint_like(actions, n_act)
         use_policy = torch.rand_like(actions).gt(epsilon)
         return torch.where(use_policy, actions, actions_random)
