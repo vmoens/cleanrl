@@ -231,7 +231,6 @@ if __name__ == "__main__":
                 if d and info["lives"][idx] == 0:
                     desc = f"global_step={global_step}, episodic_return={info['r'][idx]}"
                     avg_returns.append(info["r"][idx])
-                    logs = {"episodic_return": np.array(avg_returns).mean()}
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -320,6 +319,7 @@ if __name__ == "__main__":
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
             pbar.set_description(f"speed: {speed: 4.1f} sps, " + desc)
+            logs = {"episode_return": np.array(avg_returns).mean()}
             wandb.log({
                 "speed": speed,
                 **logs,
