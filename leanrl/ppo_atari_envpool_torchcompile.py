@@ -394,7 +394,7 @@ if __name__ == "__main__":
                     "logprobs": container["logprobs"].mean(),
                     "advantages": container["advantages"].mean(),
                         "returns": container["returns"].mean(),
-                        "values": container["values"].mean(),
+                        "vals": container["vals"].mean(),
                         "gn": container["gn"].mean(),
                         }
 
