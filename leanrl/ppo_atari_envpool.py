@@ -229,8 +229,8 @@ if __name__ == "__main__":
 
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
-                    desc = f"global_step={global_step}, episodic_return={info['r'][idx]}"
                     avg_returns.append(info["r"][idx])
+            desc = f"global_step={global_step}, episodic_return={np.mean(avg_returns)}"
 
         # bootstrap value if not done
         with torch.no_grad():

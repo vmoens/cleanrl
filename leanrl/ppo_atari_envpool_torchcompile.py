@@ -177,8 +177,6 @@ def gae(next_obs, next_done, container):
     nextvalues = next_value
     for t in range(args.num_steps - 1, -1, -1):
         cur_val = vals_unbind[t]
-        print(nextvalues.shape, cur_val.shape, rewards[t].shape)
-        afilhuhdf
         delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - cur_val
         advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
         lastgaelam = advantages[-1]
@@ -202,7 +200,7 @@ def rollout(obs, done, avg_returns=[]):
 
         idx = next_done & info["lives"] == 0
         if idx.any():
-            avg_returns.append(info["r"][idx].mean())
+            avg_returns.extend(info["r"][idx])
 
         ts.append(
             tensordict.TensorDict._new_unsafe(
@@ -266,6 +264,7 @@ def update(obs, actions, logprobs, advantages, returns, vals):
     loss.backward()
     nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
     optimizer.step()
+
     return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
 
@@ -374,7 +373,7 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         clipfracs = []
         for epoch in range(args.update_epochs):
-            b_inds = torch.randperm(args.batch_size, device=device).split(args.minibatch_size)
+            b_inds = torch.randperm(container_flat.shape[0], device=device).split(args.minibatch_size)
             for b in b_inds:
 
                 container_local = container_flat[b]
