@@ -22,7 +22,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
     NoopResetEnv,
 )
 
-wandb.init(project="ppo_atari", job_type=os.path.basename(__file__))
+wandb.init(project="ppo_atari", name=os.path.basename(__file__))
 
 @dataclass
 class Args:

@@ -25,7 +25,7 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 os.environ["TF_XLA_FLAGS"] = "--xla_gpu_autotune_level=2 --xla_gpu_deterministic_reductions"
 os.environ["TF_CUDNN DETERMINISTIC"] = "1"
 
-wandb.init(project="ppo_atari", job_type=os.path.basename(__file__))
+wandb.init(project="ppo_atari", name=os.path.basename(__file__))
 
 
 @dataclass
