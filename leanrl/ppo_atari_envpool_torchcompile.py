@@ -356,8 +356,6 @@ if __name__ == "__main__":
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
             lrnow = frac * args.learning_rate
-            if not isinstance(optimizer.param_groups[0]["lr"], torch.Tensor):
-                optimizer.param_groups[0]["lr"] = torch.tensor(optimizer.param_groups[0]["lr"], device=device)
             optimizer.param_groups[0]["lr"].copy_(lrnow)
 
         torch.compiler.cudagraph_mark_step_begin()
@@ -371,14 +369,14 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         clipfracs = []
         for epoch in range(args.update_epochs):
-            b_inds = torch.randperm(args.batch_size, device=device)
-            b_inds = b_inds.split(args.minibatch_size)
+            b_inds = torch.randperm(args.batch_size, device=device).split(args.minibatch_size)
             for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                container_local = container_flat[b].clone()
+                container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
+                assert (tensordict.TensorDict.from_modules(agent_inference) == tensordict.TensorDict.from_module(agent).data).all()
 
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
