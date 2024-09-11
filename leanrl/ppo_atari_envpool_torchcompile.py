@@ -188,7 +188,7 @@ def gae(next_obs, next_done, container):
     return container
 
 
-def rollout(obs, done, get_returns=False, avg_returns=[]):
+def rollout(obs, done, avg_returns=[]):
     ts = []
     for step in range(args.num_steps):
         # ALGO LOGIC: action logic
@@ -197,8 +197,8 @@ def rollout(obs, done, get_returns=False, avg_returns=[]):
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, reward, next_done, info = step_func(action)
 
-        if get_returns:
-            idx = next_done & info["lives"] == 0
+        idx = next_done & info["lives"] == 0
+        if idx.any():
             avg_returns.append(info["r"][idx].mean())
 
         ts.append(
@@ -361,8 +361,7 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"].copy_(lrnow)
 
         torch.compiler.cudagraph_mark_step_begin()
-        next_obs, next_done, container = rollout(next_obs, next_done, get_returns=iteration % 10 == 0,
-                                                 avg_returns=avg_returns)
+        next_obs, next_done, container = rollout(next_obs, next_done, avg_returns=avg_returns)
         global_step += container.numel()
 
         container = gae(next_obs, next_done, container)
