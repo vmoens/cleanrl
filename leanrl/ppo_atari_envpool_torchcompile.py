@@ -376,7 +376,6 @@ if __name__ == "__main__":
                 container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
-                assert (tensordict.TensorDict.from_modules(agent_inference) == tensordict.TensorDict.from_module(agent).data).all()
 
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
