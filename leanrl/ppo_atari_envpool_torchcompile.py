@@ -195,9 +195,9 @@ def rollout(obs, done, avg_returns=[]):
         action, logprob, _, value = policy(obs=obs)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, reward, done, info = step_func(action)
+        next_obs, reward, next_done, info = step_func(action)
 
-        idx = done & info["lives"] == 0
+        idx = next_done & info["lives"] == 0
         if idx.any():
             avg_returns.append(info["r"][idx].mean())
 
@@ -214,6 +214,7 @@ def rollout(obs, done, avg_returns=[]):
         )
 
         obs = next_obs = next_obs.to(device, non_blocking=True)
+        done = next_done
 
     container = torch.stack(ts, 0).to(device)
     next_done = done.to(device, non_blocking=True)
