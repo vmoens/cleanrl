@@ -176,12 +176,15 @@ def gae(next_obs, next_done, container):
     nextnonterminal = (~next_done).float()
     nextvalues = next_value
     for t in range(args.num_steps - 1, -1, -1):
-        delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - vals_unbind[t]
+        cur_val = vals_unbind[t]
+        print(nextvalues.shape, cur_val.shape, rewards[t].shape)
+        afilhuhdf
+        delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - cur_val
         advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
         lastgaelam = advantages[-1]
 
         nextnonterminal = nextnonterminals[t]
-        nextvalues = vals_unbind[t]
+        nextvalues = cur_val
 
     advantages = container["advantages"] = torch.stack(list(reversed(advantages)))
     container["returns"] = advantages + vals
@@ -204,6 +207,7 @@ def rollout(obs, done, avg_returns=[]):
         ts.append(
             tensordict.TensorDict._new_unsafe(
                 obs=obs,
+                # cleanrl ppo examples associate the done with the previous obs (not the done resulting from action)
                 dones=done,
                 vals=value.flatten(),
                 actions=action,
