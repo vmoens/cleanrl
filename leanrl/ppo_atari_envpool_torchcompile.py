@@ -426,5 +426,6 @@ if __name__ == "__main__":
                     "lr": lr,
                     **logs
                 }, step=global_step)
+                timeit.print()
 
     envs.close()
