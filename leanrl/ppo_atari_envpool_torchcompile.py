@@ -346,7 +346,7 @@ if __name__ == "__main__":
     global_step = 0
     container_local = None
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
-    next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
+    next_done = torch.zeros(args.num_envs, dtype=torch.bool)
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
