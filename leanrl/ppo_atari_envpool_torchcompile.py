@@ -374,7 +374,7 @@ if __name__ == "__main__":
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(container_flat.shape[0], device=device).split(args.minibatch_size)
             for b in b_inds:
-                print(b_inds.shape)
+                print(b.shape)
                 container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
