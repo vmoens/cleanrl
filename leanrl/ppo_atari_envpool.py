@@ -320,7 +320,12 @@ if __name__ == "__main__":
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
             pbar.set_description(f"speed: {speed: 4.1f} sps, " + desc)
-            logs = {"episode_return": np.array(avg_returns).mean()}
+            with torch.no_grad():
+                logs = {"episode_return": np.array(avg_returns).mean(),
+                    "logprobs": b_logprobs.mean(),
+                    "advantages": advantages.mean(),
+                        "returns": returns.mean(),
+                        "values": values.mean()}
             wandb.log({
                 "speed": speed,
                 **logs,
