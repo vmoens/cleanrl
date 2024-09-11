@@ -14,6 +14,7 @@ import torch.optim as optim
 import tqdm
 import tyro
 from tensordict import from_module, TensorDict
+from tensordict.nn import CudaGraphCompiledModule
 from torchrl.data import ReplayBuffer, LazyTensorStorage, ListStorage
 import tensordict
 
@@ -73,33 +74,6 @@ class Args:
     """whether to use torch.compile."""
     cudagraphs: bool = False
     """whether to use cudagraphs on top of compile."""
-
-
-class CudaGraphCompiledModule:
-    def __init__(self, module, warmup=2):
-        self.module = module
-        self.counter = 0
-        self.warmup = warmup
-
-
-    def __call__(self, *args, **kwargs):
-        if self.counter < self.warmup:
-            out = self.module(*args, **kwargs)
-            self.counter += 1
-            return out
-        elif self.counter == self.warmup:
-            self.graph = torch.cuda.CUDAGraph()
-            self._args = args
-            with torch.cuda.graph(self.graph):
-                out = self.module(*args, **kwargs)
-            self._out = out
-            self.counter += 1
-            return out
-        else:
-            for _arg, _orig_arg in zip(args, self._args):
-                _orig_arg.copy_(_arg)
-            self.graph.replay()
-            return self._out.clone() if self._out is not None else None
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):

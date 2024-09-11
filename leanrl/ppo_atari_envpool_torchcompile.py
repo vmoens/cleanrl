@@ -18,7 +18,7 @@ import tqdm
 import tyro
 import wandb
 from tensordict import from_module
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 from torch.distributions.categorical import Categorical, Distribution
 
 Distribution.set_default_validate_args(False)
@@ -41,7 +41,6 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    # env_id: str = "Breakout-v5"
     env_id: str = "Breakout-v5"
     """the id of the environment"""
     total_timesteps: int = 10000000
@@ -93,35 +92,6 @@ class Args:
     cudagraphs: bool = False
     """whether to use cudagraphs on top of compile."""
 
-
-class CudaGraphCompiledModule:
-    def __init__(self, module, warmup=2):
-        self.module = module
-        self.counter = 0
-        self.warmup = warmup
-        if hasattr(module, "in_keys"):
-            self.in_keys = module.in_keys
-        if hasattr(module, "out_keys"):
-            self.out_keys = module.out_keys
-
-    @tensordict.nn.dispatch(auto_batch_size=False)
-    def __call__(self, tensordict, *args, **kwargs):
-        if self.counter < self.warmup:
-            out = self.module(tensordict, *args, **kwargs)
-            self.counter += 1
-            return out
-        elif self.counter == self.warmup:
-            self.graph = torch.cuda.CUDAGraph()
-            self._tensordict = tensordict
-            with torch.cuda.graph(self.graph):
-                out = self.module(tensordict, *args, **kwargs)
-            self._out = out
-            self.counter += 1
-            return out
-        else:
-            self._tensordict.update_(tensordict)
-            self.graph.replay()
-            return self._out.clone() if self._out is not None else None
 
 
 class RecordEpisodeStatistics(gym.Wrapper):
@@ -231,12 +201,6 @@ if __name__ == "__main__":
         next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
         return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done), info
 
-
-    # @step_func.register_fake
-    # def _(action):
-    #     return (torch.empty((args.num_envs, 4, 84, 84), dtype=torch.uint8),
-    #             torch.empty((args.num_envs,), dtype=torch.float),
-    #             torch.empty((args.num_envs,), dtype=torch.bool))
 
     ####### Agent #######
     agent = Agent(envs, device=device)
@@ -421,10 +385,7 @@ if __name__ == "__main__":
             for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                if container_local is None:
-                    container_local = container_flat[b].clone()
-                else:
-                    container_local.update_(container_flat[b])
+                container_local = container_flat[b].clone()
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
 

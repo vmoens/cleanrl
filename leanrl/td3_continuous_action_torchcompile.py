@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
-from tensordict.nn import TensorDictModule
+from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 from tensordict import TensorDict, from_module, from_modules
 import tensordict
@@ -71,40 +71,6 @@ class Args:
     cudagraphs: bool = False
     """whether to use cudagraphs on top of compile."""
 
-
-class CudaGraphCompiledModule:
-    def __init__(self, module, warmup=2, in_keys=None, out_keys=None):
-        self.module = module
-        self.counter = 0
-        self.warmup = warmup
-        if hasattr(module, "in_keys"):
-            self.in_keys = module.in_keys
-        else:
-            self.in_keys = in_keys if in_keys is not None else []
-        if hasattr(module, "out_keys"):
-            self.out_keys = module.out_keys
-        else:
-            self.out_keys = out_keys if out_keys is not None else []
-
-
-    @tensordict.nn.dispatch(auto_batch_size=False)
-    def __call__(self, tensordict, *args, **kwargs):
-        if self.counter < self.warmup:
-            out = self.module(tensordict, *args, **kwargs)
-            self.counter += 1
-            return out
-        elif self.counter == self.warmup:
-            self.graph = torch.cuda.CUDAGraph()
-            self._tensordict = tensordict
-            with torch.cuda.graph(self.graph):
-                out = self.module(tensordict, *args, **kwargs)
-            self._out = out
-            self.counter += 1
-            return out
-        else:
-            self._tensordict.update_(tensordict)
-            self.graph.replay()
-            return self._out.clone() if self._out is not None else None
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
