@@ -217,7 +217,6 @@ def rollout(obs, done, avg_returns=[]):
         done = next_done
 
     container = torch.stack(ts, 0).to(device)
-    next_done = done.to(device, non_blocking=True)
     return next_obs, next_done, container
 
 
