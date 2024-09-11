@@ -197,7 +197,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         actions = torch.argmax(q_values, dim=1)
         actions_random = torch.rand(actions.shape, device=actions.device).mul(n_act).floor().to(torch.long)
         # actions_random = torch.randint_like(actions, n_act)
-        use_policy = torch.rand_like(actions).gt(epsilon)
+        use_policy = torch.rand(actions.shape, device=actions.device).gt(epsilon)
         return torch.where(use_policy, actions, actions_random)
 
     rb = ReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
