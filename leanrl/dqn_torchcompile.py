@@ -14,7 +14,7 @@ import torch.optim as optim
 import tqdm
 import tyro
 from tensordict import from_module, TensorDict
-from torchrl.data import ReplayBuffer, LazyTensorStorage
+from torchrl.data import ReplayBuffer, LazyTensorStorage, ListStorage
 import tensordict
 
 @dataclass
@@ -181,7 +181,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
 
     target_network = QNetwork(n_obs=n_obs, n_act=n_act, device=device)
-    target_params = params_vals.clone()
+    target_params = params_vals.clone().lock_()
     target_params.to_module(target_network)
 
     def update(data):
@@ -201,24 +201,32 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # We use torch.where because it frees us from using control flow
         use_policy = torch.rand(len(obs), device=device) > epsilon
         q_values = q_network(obs)
-        actions = torch.argmax(q_values, dim=1).to(torch.int64)
+        actions = torch.argmax(q_values, dim=1)
         actions_random = torch.randint(n_act, actions.shape, device=actions.device)
         return torch.where(use_policy, actions, actions_random)
 
+    rb = ReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
+    # rb = ReplayBuffer(storage=ListStorage(args.buffer_size))
+
     if args.compile or args.cudagraphs:
         args.compile = True
-        update = torch.compile(update)
-        policy = torch.compile(policy, mode="reduce-overhead")
         if args.cudagraphs:
-            update = CudaGraphCompiledModule(update, warmup=3)
 
-    rb = ReplayBuffer(storage=LazyTensorStorage(args.buffer_size, device=device))
+            update = torch.compile(update)
+            policy = torch.compile(policy)
+
+            update = CudaGraphCompiledModule(update, warmup=3)
+            policy = CudaGraphCompiledModule(policy, warmup=3)
+        else:
+            update = torch.compile(update, mode="reduce-overhead")
+
     start_time = None
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     obs = torch.as_tensor(obs, device=device, dtype=torch.float)
     pbar = tqdm.tqdm(range(args.total_timesteps))
+    transitions = []
     for global_step in pbar:
         if global_step == args.learning_starts + args.measure_burnin:
             start_time = time.time()
@@ -243,24 +251,26 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             if trunc:
                 real_next_obs[idx] = torch.as_tensor(infos["final_observation"][idx], device=device, dtype=torch.float)
         # obs = torch.as_tensor(obs, device=device, dtype=torch.float)
-        transition = TensorDict(
+        terminations = torch.as_tensor(terminations, device=device, dtype=torch.bool)
+        transitions.append(TensorDict._new_unsafe(
             observations=obs,
             next_observations=real_next_obs,
             actions=actions,
             rewards=torch.as_tensor(rewards, device=device, dtype=torch.float),
             terminations=terminations,
             dones=terminations,
-            batch_size=obs.shape[0],
+            batch_size=obs.shape[:1],
             device=device
-        )
+        ))
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
-        rb.extend(transition)
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
             if global_step % args.train_frequency == 0:
+                rb.extend(torch.cat(transitions))
+                transitions = []
                 data = rb.sample(args.batch_size)
                 update(data)
             # update target network
