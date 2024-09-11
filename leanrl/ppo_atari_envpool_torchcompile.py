@@ -163,6 +163,113 @@ class Agent(nn.Module):
         return action, probs.log_prob(action), probs.entropy(), self.critic(hidden)
 
 
+def gae(next_obs, next_done, container):
+    # bootstrap value if not done
+    next_value = get_value(next_obs).reshape(-1)
+    lastgaelam = 0
+    dones = container["dones"].unbind(0)
+    vals = container["vals"].unbind(0)
+    rewards = container["rewards"].unbind(0)
+
+    advantages = []
+    for t in range(args.num_steps - 1, -1, -1):
+        if t == args.num_steps - 1:
+            nextnonterminal = (~next_done).float()
+            nextvalues = next_value
+        else:
+            nextnonterminal = (~dones[t + 1]).float()
+            nextvalues = vals[t + 1]
+        delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - vals[t]
+        advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
+        lastgaelam = advantages[-1]
+    advantages = container["advantages"] = torch.stack(list(reversed(advantages)))
+    container["returns"] = advantages + vals
+    return container
+
+
+def rollout(obs, done, get_returns=False, avg_returns=[]):
+    ts = []
+    for step in range(args.num_steps):
+        # ALGO LOGIC: action logic
+        action, logprob, _, value = policy(obs=obs)
+
+        # TRY NOT TO MODIFY: execute the game and log data.
+        next_obs, reward, next_done, info = step_func(action)
+
+        if get_returns:
+            idx = next_done & info["lives"] == 0
+            avg_returns.append(info["r"][idx].mean())
+
+        ts.append(
+            tensordict.TensorDict._new_unsafe(
+                obs=obs,
+                dones=done,
+                vals=value.flatten(),
+                actions=action,
+                logprobs=logprob,
+                rewards=reward,
+                batch_size=(args.num_envs,)
+            )
+        )
+
+        obs = next_obs = next_obs.to(device, non_blocking=True)
+
+    container = torch.stack(ts, 0).to(device)
+    next_done = next_done.to(device, non_blocking=True)
+    return next_obs, next_done, container
+
+
+def update(obs, actions, logprobs, advantages, returns, vals):
+    optimizer.zero_grad()
+    _, newlogprob, entropy, newvalue = agent.get_action_and_value(obs, actions)
+    logratio = newlogprob - logprobs
+    ratio = logratio.exp()
+
+    with torch.no_grad():
+        # calculate approx_kl http://joschu.net/blog/kl-approx.html
+        old_approx_kl = (-logratio).mean()
+        approx_kl = ((ratio - 1) - logratio).mean()
+        clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
+
+    mb_advantages = advantages
+    if args.norm_adv:
+        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+    # Policy loss
+    pg_loss1 = -mb_advantages * ratio
+    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+    # Value loss
+    newvalue = newvalue.view(-1)
+    if args.clip_vloss:
+        v_loss_unclipped = (newvalue - returns) ** 2
+        v_clipped = vals + torch.clamp(
+            newvalue - vals,
+            -args.clip_coef,
+            args.clip_coef,
+        )
+        v_loss_clipped = (v_clipped - returns) ** 2
+        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+        v_loss = 0.5 * v_loss_max.mean()
+    else:
+        v_loss = 0.5 * ((newvalue - returns) ** 2).mean()
+
+    entropy_loss = entropy.mean()
+    loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+
+    loss.backward()
+    nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+    optimizer.step()
+    return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
+
+
+update = tensordict.nn.TensorDictModule(
+    update,
+    in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"],
+    out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"]
+)
+
 if __name__ == "__main__":
     args = tyro.cli(Args)
     batch_size = int(args.num_envs * args.num_steps)
@@ -206,7 +313,7 @@ if __name__ == "__main__":
     agent = Agent(envs, device=device)
     # Make a version of agent with detached params
     agent_inference = Agent(envs, device=device)
-    from_module(agent).detach().to_module(agent_inference)
+    from_module(agent).data.to_module(agent_inference)
 
     ####### Optimizer #######
     optimizer = optim.Adam(agent.parameters(), lr=torch.tensor(args.learning_rate, device=device), eps=1e-5)
@@ -221,130 +328,14 @@ if __name__ == "__main__":
     if args.compile or args.cudagraphs:
         args.compile = True
         policy = torch.compile(policy)
-        if args.cudagraphs:
-            policy = CudaGraphCompiledModule(policy)
 
-
-    def gae(next_obs, next_done, container):
-        # bootstrap value if not done
-        next_value = get_value(next_obs).reshape(-1)
-        lastgaelam = 0
-        dones = container["dones"].unbind(0)
-        vals = container["vals"].unbind(0)
-        rewards = container["rewards"].unbind(0)
-
-        advantages = []
-        for t in range(args.num_steps - 1, -1, -1):
-            if t == args.num_steps - 1:
-                nextnonterminal = (~next_done).float()
-                nextvalues = next_value
-            else:
-                nextnonterminal = (~dones[t + 1]).float()
-                nextvalues = vals[t + 1]
-            delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - vals[t]
-            advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
-            lastgaelam = advantages[-1]
-        container["advantages"] = torch.stack(list(reversed(advantages)))
-        container["returns"] = container["advantages"] + container["vals"]
-        return container
-
-
-    if args.compile:
         gae = torch.compile(gae, fullgraph=True)
-        if args.cudagraphs:
-            gae = CudaGraphCompiledModule(
-                TensorDictModule(gae, in_keys=["next_obs", "next_done", "container"], out_keys=["container"]))
 
-
-    def rollout(obs, done, get_returns=False, avg_returns=[]):
-        ts = []
-        for step in range(args.num_steps):
-            # ALGO LOGIC: action logic
-            action, logprob, _, value = policy(obs=obs)
-
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, next_done, info = step_func(action)
-
-            if get_returns:
-                idx = next_done & info["lives"] == 0
-                avg_returns.append(info["r"][idx].mean())
-
-            ts.append(
-                tensordict.TensorDict._new_unsafe(
-                    obs=obs,
-                    dones=done,
-                    vals=value.flatten(),
-                    actions=action,
-                    logprobs=logprob,
-                    rewards=reward,
-                    batch_size=(args.num_envs,)
-                )
-            )
-
-            obs = next_obs = next_obs.to(device, non_blocking=True)
-
-        container = torch.stack(ts, 0).to(device)
-        next_done = next_done.to(device, non_blocking=True)
-        return next_obs, next_done, container
-
-
-    # if args.compile:
-    #     rollout = torch.compile(rollout)
-
-    def update(obs, actions, logprobs, advantages, returns, vals):
-        optimizer.zero_grad()
-        _, newlogprob, entropy, newvalue = agent.get_action_and_value(obs, actions)
-        logratio = newlogprob - logprobs
-        ratio = logratio.exp()
-
-        with torch.no_grad():
-            # calculate approx_kl http://joschu.net/blog/kl-approx.html
-            old_approx_kl = (-logratio).mean()
-            approx_kl = ((ratio - 1) - logratio).mean()
-            clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
-
-        mb_advantages = advantages
-        if args.norm_adv:
-            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
-        # Policy loss
-        pg_loss1 = -mb_advantages * ratio
-        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
-
-        # Value loss
-        newvalue = newvalue.view(-1)
-        if args.clip_vloss:
-            v_loss_unclipped = (newvalue - returns) ** 2
-            v_clipped = vals + torch.clamp(
-                newvalue - vals,
-                -args.clip_coef,
-                args.clip_coef,
-            )
-            v_loss_clipped = (v_clipped - returns) ** 2
-            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            v_loss = 0.5 * v_loss_max.mean()
-        else:
-            v_loss = 0.5 * ((newvalue - returns) ** 2).mean()
-
-        entropy_loss = entropy.mean()
-        loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
-
-        loss.backward()
-        nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-        optimizer.step()
-        return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
-
-
-    update = tensordict.nn.TensorDictModule(
-        update,
-        in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"],
-        out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"]
-    )
-
-    if args.compile:
         update = torch.compile(update)
         if args.cudagraphs:
+            policy = CudaGraphCompiledModule(policy)
+            gae = CudaGraphCompiledModule(
+                TensorDictModule(gae, in_keys=["next_obs", "next_done", "container"], out_keys=["container"]))
             update = CudaGraphCompiledModule(update)
 
     # Tacking variables - DO NOT CHANGE

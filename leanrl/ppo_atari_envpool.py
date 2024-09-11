@@ -76,6 +76,9 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    measure_burnin: int = 3
+    """Number of burn-in iterations for speed measure."""
+
 
 class RecordEpisodeStatistics(gym.Wrapper):
     def __init__(self, env, deque_size=100):
