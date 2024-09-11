@@ -262,8 +262,8 @@ if __name__ == "__main__":
         update_pol = torch.compile(update_pol)
         policy = torch.compile(policy, mode="reduce-overhead")
         if args.cudagraphs:
-            update_main = CudaGraphCompiledModule(update_main, in_keys=[], out_keys=[])
-            update_pol = CudaGraphCompiledModule(update_pol, in_keys=[], out_keys=[])
+            update_main = CudaGraphCompiledModule(update_main, in_keys=[], out_keys=[], warmup=4)
+            update_pol = CudaGraphCompiledModule(update_pol, in_keys=[], out_keys=[], warmup=4)
             # policy = CudaGraphCompiledModule(policy)
 
 
