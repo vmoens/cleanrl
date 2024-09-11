@@ -76,7 +76,7 @@ class Args:
 
 
 class CudaGraphCompiledModule:
-    def __init__(self, module, warmup=2, in_keys=None, out_keys=None):
+    def __init__(self, module, warmup=2):
         self.module = module
         self.counter = 0
         self.warmup = warmup
@@ -241,18 +241,24 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                 if info and "episode" in info:
                     desc = f"global_step={global_step}, episodic_return={info['episode']['r']}"
 
-        next_obs = torch.as_tensor(next_obs, device=device, dtype=torch.float)
-        real_next_obs = next_obs.clone()
+        next_obs = torch.as_tensor(next_obs, dtype=torch.float).to(device, non_blocking=True)
+        terminations = torch.as_tensor(terminations, dtype=torch.bool).to(device, non_blocking=True)
+        rewards = torch.as_tensor(rewards, dtype=torch.float).to(device, non_blocking=True)
+
+        real_next_obs = None
         for idx, trunc in enumerate(truncations):
             if trunc:
+                if real_next_obs is None:
+                    real_next_obs = next_obs.clone()
                 real_next_obs[idx] = torch.as_tensor(infos["final_observation"][idx], device=device, dtype=torch.float)
+        if real_next_obs is None:
+            real_next_obs = next_obs
         # obs = torch.as_tensor(obs, device=device, dtype=torch.float)
-        terminations = torch.as_tensor(terminations, device=device, dtype=torch.bool)
         transitions.append(TensorDict._new_unsafe(
             observations=obs,
             next_observations=real_next_obs,
             actions=actions,
-            rewards=torch.as_tensor(rewards, device=device, dtype=torch.float),
+            rewards=rewards,
             terminations=terminations,
             dones=terminations,
             batch_size=obs.shape[:1],
