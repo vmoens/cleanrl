@@ -374,12 +374,15 @@ if __name__ == "__main__":
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(container_flat.shape[0], device=device).split(args.minibatch_size)
             for b in b_inds:
-
+                print(b_inds.shape)
                 container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
-            if args.target_kl is not None and out["approx_kl"] > args.target_kl:
-                break
+                if args.target_kl is not None and out["approx_kl"] > args.target_kl:
+                    break
+            else:
+                continue
+            break
 
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)

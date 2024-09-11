@@ -230,7 +230,7 @@ if __name__ == "__main__":
             for idx, d in enumerate(next_done):
                 if d and info["lives"][idx] == 0:
                     avg_returns.append(info["r"][idx])
-            desc = f"global_step={global_step}, episodic_return={np.mean(avg_returns)}"
+                desc = f"global_step={global_step}, episodic_return={info['r'][idx]}"
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -263,6 +263,7 @@ if __name__ == "__main__":
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
+                print(end-start)
                 mb_inds = b_inds[start:end]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
