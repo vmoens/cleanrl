@@ -173,16 +173,14 @@ def gae(next_obs, next_done, container):
     rewards = container["rewards"].unbind(0)
 
     advantages = []
+    nextnonterminal = (~next_done).float()
+    nextvalues = next_value
     for t in range(args.num_steps - 1, -1, -1):
-        if t == args.num_steps - 1:
-            nextnonterminal = (~next_done).float()
-            nextvalues = next_value
-        else:
-            nextnonterminal = (~dones[t + 1]).float()
-            nextvalues = vals[t + 1]
         delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - vals_unbind[t]
         advantages.append(delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
         lastgaelam = advantages[-1]
+        nextnonterminal = (~dones[t]).float()
+        nextvalues = vals_unbind[t]
     advantages = container["advantages"] = torch.stack(list(reversed(advantages)))
     container["returns"] = advantages + vals
     return container
