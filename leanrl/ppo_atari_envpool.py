@@ -13,7 +13,10 @@ import torch.nn as nn
 import torch.optim as optim
 import tqdm
 import tyro
+import wandb
 from torch.distributions.categorical import Categorical
+
+wandb.init(project=os.path.basename(__file__))
 
 
 @dataclass
@@ -225,6 +228,7 @@ if __name__ == "__main__":
                 if d and info["lives"][idx] == 0:
                     desc = f"global_step={global_step}, episodic_return={info['r'][idx]}"
                     avg_returns.append(info["r"][idx])
+                    logs = {"episodic_return": np.array(avg_returns).mean()}
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -309,6 +313,13 @@ if __name__ == "__main__":
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.1f} sps, "+desc)
+
+        if global_step_burnin is not None and iteration % 10 == 0:
+            speed = (global_step - global_step_burnin) / (time.time() - start_time)
+            pbar.set_description(f"speed: {speed: 4.1f} sps, " + desc)
+            wandb.log({
+                "speed": speed,
+                **logs,
+            }, step=global_step)
 
     envs.close()

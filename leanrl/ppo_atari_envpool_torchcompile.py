@@ -16,13 +16,16 @@ import torch.nn as nn
 import torch.optim as optim
 import tqdm
 import tyro
+import wandb
 from tensordict import from_module
 from tensordict.nn import TensorDictModule
 from torch.distributions.categorical import Categorical, Distribution
-from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 torch.set_float32_matmul_precision('high')
+
+wandb.init(project=os.path.basename(__file__))
+
 
 @dataclass
 class Args:
@@ -119,6 +122,7 @@ class CudaGraphCompiledModule:
             self._tensordict.update_(tensordict)
             self.graph.replay()
             return self._out.clone() if self._out is not None else None
+
 
 class RecordEpisodeStatistics(gym.Wrapper):
     def __init__(self, env, deque_size=100):
@@ -220,12 +224,13 @@ if __name__ == "__main__":
     envs = RecordEpisodeStatistics(envs)
     assert isinstance(envs.action_space, gym.spaces.Discrete), "only discrete action space is supported"
 
+
     # Register step as a special op not to graph break
     # @torch.library.custom_op("mylib::step", mutates_args=())
     def step_func(action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        with timeit("rollout - step - env"):
-            next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
+        next_obs_np, reward, next_done, info = envs.step(action.cpu().numpy())
         return torch.as_tensor(next_obs_np), torch.as_tensor(reward), torch.as_tensor(next_done), info
+
 
     # @step_func.register_fake
     # def _(action):
@@ -244,7 +249,8 @@ if __name__ == "__main__":
 
     ####### Executables #######
     # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
-    policy = TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"], out_keys=["action", "log_prob", "entropy", "value"])
+    policy = TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"],
+                              out_keys=["action", "log_prob", "entropy", "value"])
     get_value = agent_inference.get_value
 
     # Compile policy
@@ -253,6 +259,7 @@ if __name__ == "__main__":
         policy = torch.compile(policy)
         if args.cudagraphs:
             policy = CudaGraphCompiledModule(policy)
+
 
     def gae(next_obs, next_done, container):
         # bootstrap value if not done
@@ -277,21 +284,22 @@ if __name__ == "__main__":
         container["returns"] = container["advantages"] + container["vals"]
         return container
 
+
     if args.compile:
         gae = torch.compile(gae, fullgraph=True)
         if args.cudagraphs:
-            gae = CudaGraphCompiledModule(TensorDictModule(gae, in_keys=["next_obs", "next_done", "container"], out_keys=["container"]))
+            gae = CudaGraphCompiledModule(
+                TensorDictModule(gae, in_keys=["next_obs", "next_done", "container"], out_keys=["container"]))
+
 
     def rollout(obs, done, get_returns=False, avg_returns=[]):
         ts = []
         for step in range(args.num_steps):
             # ALGO LOGIC: action logic
-            with timeit("rollout - policy"):
-                action, logprob, _, value = policy(obs=obs)
+            action, logprob, _, value = policy(obs=obs)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            with timeit("rollout - step"):
-                next_obs, reward, next_done, info = step_func(action)
+            next_obs, reward, next_done, info = step_func(action)
 
             if get_returns:
                 idx = next_done & info["lives"] == 0
@@ -314,6 +322,7 @@ if __name__ == "__main__":
         container = torch.stack(ts, 0).to(device)
         next_done = next_done.to(device, non_blocking=True)
         return next_obs, next_done, container
+
 
     # if args.compile:
     #     rollout = torch.compile(rollout)
@@ -362,6 +371,7 @@ if __name__ == "__main__":
         optimizer.step()
         return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
 
+
     update = tensordict.nn.TensorDictModule(
         update,
         in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"],
@@ -380,7 +390,6 @@ if __name__ == "__main__":
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
     next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
-
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
     for iteration in pbar:
@@ -397,14 +406,12 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"].copy_(lrnow)
 
         torch.compiler.cudagraph_mark_step_begin()
-        with timeit("rollout"):
-            next_obs, next_done, container = rollout(next_obs, next_done, get_returns=iteration % 10 == 0, avg_returns=avg_returns)
+        next_obs, next_done, container = rollout(next_obs, next_done, get_returns=iteration % 10 == 0,
+                                                 avg_returns=avg_returns)
         global_step += container.numel()
 
-        with timeit("gae"):
-            container = gae(next_obs, next_done, container)
-        with timeit("view"):
-            container_flat = container.view(-1)
+        container = gae(next_obs, next_done, container)
+        container_flat = container.view(-1)
 
         # Optimizing the policy and value network
         clipfracs = []
@@ -414,21 +421,30 @@ if __name__ == "__main__":
             for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
                 end = start + args.minibatch_size
 
-                with timeit("copy_data"):
-                    if container_local is None:
-                        container_local = container_flat[b].clone()
-                    else:
-                        container_local.update_(container_flat[b])
+                if container_local is None:
+                    container_local = container_flat[b].clone()
+                else:
+                    container_local.update_(container_flat[b])
 
-                with timeit("update"):
-                    out = update(container_local, tensordict_out=tensordict.TensorDict())
+                out = update(container_local, tensordict_out=tensordict.TensorDict())
 
         if global_step_burnin is not None and iteration % 10 == 0:
-            pbar.set_description(f"speed: {(global_step - global_step_burnin) / (time.time() - start_time): 4.1f} sps, "
-                                 f"reward avg: {container['rewards'].mean():4.2f}, "
-                                 f"reward max: {container['rewards'].max():4.2f}, "
-                                 f"returns: {torch.tensor(avg_returns).mean(): 4.2f},"
-                                 f"lr: {optimizer.param_groups[0]['lr']: 4.2f}")
-            timeit.print()
+            speed = (global_step - global_step_burnin) / (time.time() - start_time)
+            r = container['rewards'].mean()
+            r_max = container['rewards'].max()
+            avg_returns_t = torch.tensor(avg_returns).mean()
+            lr = optimizer.param_groups[0]['lr']
+            pbar.set_description(f"speed: {speed: 4.1f} sps, "
+                                 f"reward avg: {r :4.2f}, "
+                                 f"reward max: {r_max:4.2f}, "
+                                 f"returns: {avg_returns_t: 4.2f},"
+                                 f"lr: {lr: 4.2f}")
+            wandb.log({
+                "speed": speed,
+                "episode_return": avg_returns_t,
+                "r": r,
+                "r_max": r_max,
+                "lr": lr,
+            }, step=global_step)
 
     envs.close()

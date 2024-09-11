@@ -15,6 +15,7 @@ import numpy as np
 import optax
 import tqdm
 import tyro
+import wandb
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
 
@@ -23,6 +24,8 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 # Fix CUDNN non-determinisim; https://github.com/google/jax/issues/4823#issuecomment-952835771
 os.environ["TF_XLA_FLAGS"] = "--xla_gpu_autotune_level=2 --xla_gpu_deterministic_reductions"
 os.environ["TF_CUDNN DETERMINISTIC"] = "1"
+
+wandb.init(project=os.path.basename(__file__))
 
 
 @dataclass
@@ -83,6 +86,7 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
     measure_burnin: int = 3
+
 
 class Network(nn.Module):
     @nn.compact
@@ -197,6 +201,7 @@ if __name__ == "__main__":
     )
     handle, recv, send, step_env = envs.xla()
 
+
     def step_env_wrappeed(episode_stats, handle, action):
         handle, (next_obs, reward, next_done, info) = step_env(handle, action)
         new_episode_return = episode_stats.episode_returns + info["reward"]
@@ -206,21 +211,26 @@ if __name__ == "__main__":
             episode_lengths=(new_episode_length) * (1 - info["terminated"]) * (1 - info["TimeLimit.truncated"]),
             # only update the `returned_episode_returns` if the episode is done
             returned_episode_returns=jnp.where(
-                info["terminated"] + info["TimeLimit.truncated"], new_episode_return, episode_stats.returned_episode_returns
+                info["terminated"] + info["TimeLimit.truncated"], new_episode_return,
+                episode_stats.returned_episode_returns
             ),
             returned_episode_lengths=jnp.where(
-                info["terminated"] + info["TimeLimit.truncated"], new_episode_length, episode_stats.returned_episode_lengths
+                info["terminated"] + info["TimeLimit.truncated"], new_episode_length,
+                episode_stats.returned_episode_lengths
             ),
         )
         return episode_stats, handle, (next_obs, reward, next_done, info)
 
+
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+
 
     def linear_schedule(count):
         # anneal learning rate linearly after one training iteration which contains
         # (args.num_minibatches * args.update_epochs) gradient updates
         frac = 1.0 - (count // (args.num_minibatches * args.update_epochs)) / args.num_iterations
         return args.learning_rate * frac
+
 
     network = Network()
     actor = Actor(action_dim=envs.single_action_space.n)
@@ -256,14 +266,15 @@ if __name__ == "__main__":
         rewards=jnp.zeros((args.num_steps, args.num_envs)),
     )
 
+
     @jax.jit
     def get_action_and_value(
-        agent_state: TrainState,
-        next_obs: np.ndarray,
-        next_done: np.ndarray,
-        storage: Storage,
-        step: int,
-        key: jax.random.PRNGKey,
+            agent_state: TrainState,
+            next_obs: np.ndarray,
+            next_done: np.ndarray,
+            storage: Storage,
+            step: int,
+            key: jax.random.PRNGKey,
     ):
         """sample action, calculate value, logprob, entropy, and update storage"""
         hidden = network.apply(agent_state.params.network_params, next_obs)
@@ -284,11 +295,12 @@ if __name__ == "__main__":
         )
         return storage, action, key
 
+
     @jax.jit
     def get_action_and_value2(
-        params: flax.core.FrozenDict,
-        x: np.ndarray,
-        action: np.ndarray,
+            params: flax.core.FrozenDict,
+            x: np.ndarray,
+            action: np.ndarray,
     ):
         """calculate value, logprob of supplied `action`, and entropy"""
         hidden = network.apply(params.network_params, x)
@@ -302,12 +314,13 @@ if __name__ == "__main__":
         value = critic.apply(params.critic_params, hidden).squeeze()
         return logprob, entropy, value
 
+
     @jax.jit
     def compute_gae(
-        agent_state: TrainState,
-        next_obs: np.ndarray,
-        next_done: np.ndarray,
-        storage: Storage,
+            agent_state: TrainState,
+            next_obs: np.ndarray,
+            next_done: np.ndarray,
+            storage: Storage,
     ):
         storage = storage.replace(advantages=storage.advantages.at[:].set(0.0))
         next_value = critic.apply(
@@ -327,11 +340,12 @@ if __name__ == "__main__":
         storage = storage.replace(returns=storage.advantages + storage.values)
         return storage
 
+
     @jax.jit
     def update_ppo(
-        agent_state: TrainState,
-        storage: Storage,
-        key: jax.random.PRNGKey,
+            agent_state: TrainState,
+            storage: Storage,
+            key: jax.random.PRNGKey,
     ):
         b_obs = storage.obs.reshape((-1,) + envs.single_observation_space.shape)
         b_logprobs = storage.logprobs.reshape(-1)
@@ -378,11 +392,13 @@ if __name__ == "__main__":
                 agent_state = agent_state.apply_gradients(grads=grads)
         return agent_state, loss, pg_loss, v_loss, entropy_loss, approx_kl, key
 
+
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = None
     next_obs = envs.reset()
     next_done = np.zeros(args.num_envs)
+
 
     @jax.jit
     def rollout(agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step):
@@ -395,11 +411,13 @@ if __name__ == "__main__":
             storage = storage.replace(rewards=storage.rewards.at[step].set(reward))
         return agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step
 
+
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
+    global_step_burnin = None
     for iteration in pbar:
         if iteration == args.measure_burnin:
             start_time = time.time()
-            global_step_init = global_step
+            global_step_burnin = global_step
         iteration_time_start = time.time()
         agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step = rollout(
             agent_state, episode_stats, next_obs, next_done, storage, key, handle, global_step
@@ -413,7 +431,12 @@ if __name__ == "__main__":
         avg_episodic_return = np.mean(jax.device_get(episode_stats.returned_episode_returns))
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
-        if start_time is not None:
-            pbar.set_description(f"SPS: {(global_step - global_step_init) / (time.time() - start_time): 4.4f}")
+        if global_step_burnin is not None and iteration % 10 == 0:
+            speed = (global_step - global_step_burnin) / (time.time() - start_time)
+            pbar.set_description(f"speed: {speed: 4.1f} sps")
+            wandb.log({
+                "speed": speed,
+                "episode_return": avg_episodic_return,
+            }, step=global_step)
 
     envs.close()
