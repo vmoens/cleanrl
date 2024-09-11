@@ -192,7 +192,6 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         optimizer.step()
 
     def policy(obs, epsilon):
-        # We use torch.where because it frees us from using control flow
         q_values = q_network_detach(obs)
         actions = torch.argmax(q_values, dim=1)
         actions_random = torch.rand(actions.shape, device=actions.device).mul(n_act).floor().to(torch.long)
