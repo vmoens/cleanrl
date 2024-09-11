@@ -133,9 +133,11 @@ class QNetwork(nn.Module):
         return self.network(x)
 
 
-def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+def linear_schedule(start_e: float, end_e: float, duration: int):
     slope = (end_e - start_e) / duration
-    return torch.tensor(max(slope * t + start_e, end_e), device=device)
+    slope = torch.tensor(slope, device=device)
+    while True:
+        yield slope.clamp_min(end_e)
 
 
 if __name__ == "__main__":
@@ -158,7 +160,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -220,6 +222,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     obs = torch.as_tensor(obs, device=device, dtype=torch.float)
+    eps_schedule = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps)
 
     pbar = tqdm.tqdm(range(args.total_timesteps))
     transitions = []
@@ -229,7 +232,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
             global_step_start = global_step
 
         # ALGO LOGIC: put action logic here
-        epsilon = linear_schedule(args.start_e, args.end_e, args.exploration_fraction * args.total_timesteps, global_step)
+        epsilon = next(eps_schedule)
         actions = policy(obs, epsilon)
 
         # TRY NOT TO MODIFY: execute the game and log data.
