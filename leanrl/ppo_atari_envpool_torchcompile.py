@@ -234,13 +234,12 @@ def update(obs, actions, logprobs, advantages, returns, vals):
         approx_kl = ((ratio - 1) - logratio).mean()
         clipfrac = ((ratio - 1.0).abs() > args.clip_coef).float().mean()
 
-    mb_advantages = advantages
     if args.norm_adv:
-        mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
     # Policy loss
-    pg_loss1 = -mb_advantages * ratio
-    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+    pg_loss1 = -advantages * ratio
+    pg_loss2 = -advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
     pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
     # Value loss
@@ -379,6 +378,8 @@ if __name__ == "__main__":
                 container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
+                if args.target_kl is not None and out["approx_kl"] > args.target_kl:
+                    break
 
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
