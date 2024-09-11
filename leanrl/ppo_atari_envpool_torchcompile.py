@@ -378,8 +378,8 @@ if __name__ == "__main__":
                 container_local = container_flat[b]
 
                 out = update(container_local, tensordict_out=tensordict.TensorDict())
-                if args.target_kl is not None and out["approx_kl"] > args.target_kl:
-                    break
+            if args.target_kl is not None and out["approx_kl"] > args.target_kl:
+                break
 
         if global_step_burnin is not None and iteration % 10 == 0:
             speed = (global_step - global_step_burnin) / (time.time() - start_time)
