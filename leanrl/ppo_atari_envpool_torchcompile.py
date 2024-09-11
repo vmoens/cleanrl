@@ -20,7 +20,6 @@ import wandb
 from tensordict import from_module
 from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 from torch.distributions.categorical import Categorical, Distribution
-from tensordict.utils import timeit
 
 Distribution.set_default_validate_args(False)
 torch.set_float32_matmul_precision('high')
@@ -194,23 +193,16 @@ def rollout(obs, done, avg_returns=[]):
     ts = []
     for step in range(args.num_steps):
         # ALGO LOGIC: action logic
-        with timeit("rollout - policy"):
-            action, logprob, _, value = policy(obs=obs)
+        action, logprob, _, value = policy(obs=obs)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        with timeit("rollout - step"):
-            next_obs, reward, next_done, info = step_func(action)
+        next_obs, reward, next_done, info = step_func(action)
 
-        # idx = next_done & info["lives"] == 0
-        # if idx.any():
-        #     avg_returns.extend(info["r"][idx])
-        with timeit("rollout - log"):
-            for idx, d in enumerate(next_done):
-                if d and info["lives"][idx] == 0:
-                    avg_returns.append(info["r"][idx])
+        idx = next_done & torch.as_tensor(info["lives"] == 0, device=next_done.device, dtype=torch.bool)
+        if idx.any():
+            avg_returns.extend(info["r"][idx])
 
-        with timeit("rollout - td"):
-            ts.append(
+        ts.append(
             tensordict.TensorDict._new_unsafe(
                 obs=obs,
                 # cleanrl ppo examples associate the done with the previous obs (not the done resulting from action)
@@ -226,8 +218,7 @@ def rollout(obs, done, avg_returns=[]):
         obs = next_obs = next_obs.to(device, non_blocking=True)
         done = next_done.to(device, non_blocking=True)
 
-    with timeit("rollout - stack"):
-        container = torch.stack(ts, 0).to(device)
+    container = torch.stack(ts, 0).to(device)
     return next_obs, done, container
 
 
@@ -372,12 +363,10 @@ if __name__ == "__main__":
             optimizer.param_groups[0]["lr"].copy_(lrnow)
 
         torch.compiler.cudagraph_mark_step_begin()
-        with timeit("rollout"):
-            next_obs, next_done, container = rollout(next_obs, next_done, avg_returns=avg_returns)
+        next_obs, next_done, container = rollout(next_obs, next_done, avg_returns=avg_returns)
         global_step += container.numel()
 
-        with timeit("gae"):
-            container = gae(next_obs, next_done, container)
+        container = gae(next_obs, next_done, container)
         container_flat = container.view(-1)
 
         # Optimizing the policy and value network
@@ -385,47 +374,43 @@ if __name__ == "__main__":
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(container_flat.shape[0], device=device).split(args.minibatch_size)
             for b in b_inds:
-                with timeit("indexing"):
-                    container_local = container_flat[b]
+                container_local = container_flat[b]
 
-                with timeit("update"):
-                    out = update(container_local, tensordict_out=tensordict.TensorDict())
+                out = update(container_local, tensordict_out=tensordict.TensorDict())
                 if args.target_kl is not None and out["approx_kl"] > args.target_kl:
                     break
             else:
                 continue
             break
 
-        with timeit("logging"):
-            if global_step_burnin is not None and iteration % 10 == 0:
-                speed = (global_step - global_step_burnin) / (time.time() - start_time)
-                r = container['rewards'].mean()
-                r_max = container['rewards'].max()
-                avg_returns_t = torch.tensor(avg_returns).mean()
+        if global_step_burnin is not None and iteration % 10 == 0:
+            speed = (global_step - global_step_burnin) / (time.time() - start_time)
+            r = container['rewards'].mean()
+            r_max = container['rewards'].max()
+            avg_returns_t = torch.tensor(avg_returns).mean()
 
-                with torch.no_grad():
-                    logs = {"episode_return": np.array(avg_returns).mean(),
-                        "logprobs": container["logprobs"].mean(),
-                        "advantages": container["advantages"].mean(),
-                            "returns": container["returns"].mean(),
-                            "vals": container["vals"].mean(),
-                            "gn": out["gn"].mean(),
-                            }
+            with torch.no_grad():
+                logs = {"episode_return": np.array(avg_returns).mean(),
+                    "logprobs": container["logprobs"].mean(),
+                    "advantages": container["advantages"].mean(),
+                        "returns": container["returns"].mean(),
+                        "vals": container["vals"].mean(),
+                        "gn": out["gn"].mean(),
+                        }
 
-                lr = optimizer.param_groups[0]['lr']
-                pbar.set_description(f"speed: {speed: 4.1f} sps, "
-                                     f"reward avg: {r :4.2f}, "
-                                     f"reward max: {r_max:4.2f}, "
-                                     f"returns: {avg_returns_t: 4.2f},"
-                                     f"lr: {lr: 4.2f}")
-                wandb.log({
-                    "speed": speed,
-                    "episode_return": avg_returns_t,
-                    "r": r,
-                    "r_max": r_max,
-                    "lr": lr,
-                    **logs
-                }, step=global_step)
-                timeit.print()
+            lr = optimizer.param_groups[0]['lr']
+            pbar.set_description(f"speed: {speed: 4.1f} sps, "
+                                 f"reward avg: {r :4.2f}, "
+                                 f"reward max: {r_max:4.2f}, "
+                                 f"returns: {avg_returns_t: 4.2f},"
+                                 f"lr: {lr: 4.2f}")
+            wandb.log({
+                "speed": speed,
+                "episode_return": avg_returns_t,
+                "r": r,
+                "r_max": r_max,
+                "lr": lr,
+                **logs
+            }, step=global_step)
 
     envs.close()
