@@ -3,6 +3,7 @@ import math
 import os
 import random
 import time
+from collections import deque
 from dataclasses import dataclass
 
 import gymnasium as gym
@@ -13,11 +14,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
+import wandb
 from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 # from stable_baselines3.common.buffers import ReplayBuffer
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 from tensordict import from_modules, TensorDict, from_module
 import tensordict
+
+wandb.init(project="sac_continuous", name=os.path.basename(__file__))
 
 @dataclass
 class Args:
@@ -223,6 +227,7 @@ if __name__ == "__main__":
 
         qf_loss.backward()
         q_optimizer.step()
+        return TensorDict(qf_loss=qf_loss)
 
     def update_pol(data):
         actor_optimizer.zero_grad()
@@ -242,7 +247,8 @@ if __name__ == "__main__":
 
             alpha_loss.backward()
             a_optimizer.step()
-        return alpha
+            return TensorDict(alpha=alpha, actor_loss=actor_loss, alpha_loss=alpha_loss)
+        return TensorDict(alpha=alpha, actor_loss=actor_loss)
 
     def extend_and_sample(transition):
         rb.extend(transition)
@@ -256,8 +262,8 @@ if __name__ == "__main__":
         update_pol = torch.compile(update_pol)
         policy = torch.compile(policy, mode="reduce-overhead")
         if args.cudagraphs:
-            update_main = CudaGraphCompiledModule(update_main)
-            update_pol = CudaGraphCompiledModule(update_pol)
+            update_main = CudaGraphCompiledModule(update_main, in_keys=[], out_keys=[])
+            update_pol = CudaGraphCompiledModule(update_pol, in_keys=[], out_keys=[])
             # policy = CudaGraphCompiledModule(policy)
 
 
@@ -267,6 +273,8 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(args.total_timesteps))
     start_time = None
     max_ep_ret = -float("inf")
+    avg_returns = deque(maxlen=20)
+    desc = ""
 
     for global_step in pbar:
         if global_step == args.measure_burnin + args.learning_starts:
@@ -288,8 +296,8 @@ if __name__ == "__main__":
             for info in infos["final_info"]:
                 r = float(info['episode']['r'])
                 max_ep_ret = max(max_ep_ret, r)
-                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
-                break
+                avg_returns.append(r)
+            desc = f"global_step={global_step}, episodic_return={torch.tensor(avg_returns).mean(): 4.2f} (max={max_ep_ret: 4.2f})"
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         next_obs = torch.as_tensor(next_obs, device=device, dtype=torch.float)
@@ -315,12 +323,13 @@ if __name__ == "__main__":
 
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
-            update_main(data)
+            out_main = update_main(data)
             if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
                 for _ in range(
                     args.policy_frequency
                 ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    update_pol(data)
+                    out_main.update(update_pol(data))
+
                     alpha.copy_(log_alpha.detach().exp())
 
             # update the target networks
@@ -328,8 +337,18 @@ if __name__ == "__main__":
                 # lerp is defined as x' = x + w (y-x), which is equivalent to x' = (1-w) x + w y
                 qnet_target.lerp_(qnet_params.data, args.tau)
 
-            if global_step % 100 == 0:
-                if start_time is not None:
-                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, "+desc)
+            if global_step % 100 == 0 and start_time is not None:
+                speed = (global_step - measure_burnin) / (time.time() - start_time)
+                pbar.set_description(f"{speed: 4.4f} sps, " + desc)
+                with torch.no_grad():
+                    logs = {"episode_return": torch.tensor(avg_returns).mean(),
+                            "actor_loss": out_main["actor_loss"].mean(),
+                            "alpha_loss": out_main.get("alpha_loss", 0),
+                            "qf_loss": out_main["qf_loss"].mean(),
+                            }
+                wandb.log({
+                    "speed": speed,
+                    **logs,
+                }, step=global_step)
 
     envs.close()
