@@ -312,7 +312,8 @@ if __name__ == "__main__":
     agent = Agent(envs, device=device)
     # Make a version of agent with detached params
     agent_inference = Agent(envs, device=device)
-    from_module(agent).data.to_module(agent_inference)
+    agent_inference_p = from_module(agent).data
+    agent_inference_p.to_module(agent_inference)
 
     ####### Optimizer #######
     optimizer = optim.Adam(agent.parameters(), lr=torch.tensor(args.learning_rate, device=device), eps=1e-5)
