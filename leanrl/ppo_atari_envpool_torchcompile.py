@@ -24,7 +24,7 @@ from torch.distributions.categorical import Categorical, Distribution
 Distribution.set_default_validate_args(False)
 torch.set_float32_matmul_precision('high')
 
-wandb.init(project=os.path.basename(__file__))
+wandb.init(project="ppo_atari", job_type=os.path.basename(__file__))
 
 
 @dataclass

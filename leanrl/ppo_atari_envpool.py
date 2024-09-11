@@ -16,7 +16,7 @@ import tyro
 import wandb
 from torch.distributions.categorical import Categorical
 
-wandb.init(project=os.path.basename(__file__))
+wandb.init(project="ppo_atari", job_type=os.path.basename(__file__))
 
 
 @dataclass
