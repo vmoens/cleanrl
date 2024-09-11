@@ -198,9 +198,12 @@ def rollout(obs, done, avg_returns=[]):
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, reward, next_done, info = step_func(action)
 
-        idx = next_done & info["lives"] == 0
-        if idx.any():
-            avg_returns.extend(info["r"][idx])
+        # idx = next_done & info["lives"] == 0
+        # if idx.any():
+        #     avg_returns.extend(info["r"][idx])
+        for idx, d in enumerate(next_done):
+            if d and info["lives"][idx] == 0:
+                avg_returns.append(info["r"][idx])
 
         ts.append(
             tensordict.TensorDict._new_unsafe(
