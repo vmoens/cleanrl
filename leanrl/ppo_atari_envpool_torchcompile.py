@@ -395,7 +395,7 @@ if __name__ == "__main__":
                     "advantages": container["advantages"].mean(),
                         "returns": container["returns"].mean(),
                         "vals": container["vals"].mean(),
-                        "gn": container["gn"].mean(),
+                        "gn": out.mean(),
                         }
 
             lr = optimizer.param_groups[0]['lr']
