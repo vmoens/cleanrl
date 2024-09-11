@@ -304,7 +304,7 @@ if __name__ == "__main__":
 
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                gn = nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
 
             if args.target_kl is not None and approx_kl > args.target_kl:
@@ -324,7 +324,8 @@ if __name__ == "__main__":
                     "logprobs": b_logprobs.mean(),
                     "advantages": advantages.mean(),
                         "returns": returns.mean(),
-                        "values": values.mean()}
+                        "values": values.mean(),
+                        "gn": gn}
             wandb.log({
                 "speed": speed,
                 **logs,

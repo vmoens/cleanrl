@@ -261,16 +261,16 @@ def update(obs, actions, logprobs, advantages, returns, vals):
     loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
     loss.backward()
-    nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+    gn = nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
     optimizer.step()
 
-    return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac
+    return approx_kl, v_loss.detach(), pg_loss.detach(), entropy_loss.detach(), old_approx_kl, clipfrac, gn
 
 
 update = tensordict.nn.TensorDictModule(
     update,
     in_keys=["obs", "actions", "logprobs", "advantages", "returns", "vals"],
-    out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac"]
+    out_keys=["approx_kl", "v_loss", "pg_loss", "entropy_loss", "old_approx_kl", "clipfrac", "gn"]
 )
 
 if __name__ == "__main__":
@@ -394,7 +394,9 @@ if __name__ == "__main__":
                     "logprobs": container["logprobs"].mean(),
                     "advantages": container["advantages"].mean(),
                         "returns": container["returns"].mean(),
-                        "values": container["values"].mean()}
+                        "values": container["values"].mean(),
+                        "gn": container["gn"].mean(),
+                        }
 
             lr = optimizer.param_groups[0]['lr']
             pbar.set_description(f"speed: {speed: 4.1f} sps, "
