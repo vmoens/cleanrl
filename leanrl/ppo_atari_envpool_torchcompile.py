@@ -214,10 +214,10 @@ def rollout(obs, done, avg_returns=[]):
         )
 
         obs = next_obs = next_obs.to(device, non_blocking=True)
-        done = next_done
+        done = next_done.to(device, non_blocking=True)
 
     container = torch.stack(ts, 0).to(device)
-    return next_obs, next_done, container
+    return next_obs, done, container
 
 
 def update(obs, actions, logprobs, advantages, returns, vals):
@@ -345,7 +345,7 @@ if __name__ == "__main__":
     global_step = 0
     container_local = None
     next_obs = torch.tensor(envs.reset(), device=device, dtype=torch.uint8)
-    next_done = torch.zeros(args.num_envs, dtype=torch.bool)
+    next_done = torch.zeros(args.num_envs, device=device, dtype=torch.bool)
 
     pbar = tqdm.tqdm(range(1, args.num_iterations + 1))
     global_step_burnin = None
