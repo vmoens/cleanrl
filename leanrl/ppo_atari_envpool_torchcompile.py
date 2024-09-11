@@ -410,6 +410,7 @@ if __name__ == "__main__":
                 "r": r,
                 "r_max": r_max,
                 "lr": lr,
+                **logs
             }, step=global_step)
 
     envs.close()
