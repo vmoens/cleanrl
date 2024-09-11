@@ -389,6 +389,14 @@ if __name__ == "__main__":
             r = container['rewards'].mean()
             r_max = container['rewards'].max()
             avg_returns_t = torch.tensor(avg_returns).mean()
+
+            with torch.no_grad():
+                logs = {"episode_return": np.array(avg_returns).mean(),
+                    "logprobs": container["logprobs"].mean(),
+                    "advantages": container["advantages"].mean(),
+                        "returns": container["returns"].mean(),
+                        "values": container["values"].mean()}
+
             lr = optimizer.param_groups[0]['lr']
             pbar.set_description(f"speed: {speed: 4.1f} sps, "
                                  f"reward avg: {r :4.2f}, "
