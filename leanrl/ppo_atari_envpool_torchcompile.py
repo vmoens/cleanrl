@@ -370,8 +370,7 @@ if __name__ == "__main__":
         clipfracs = []
         for epoch in range(args.update_epochs):
             b_inds = torch.randperm(args.batch_size, device=device).split(args.minibatch_size)
-            for start, b in zip(range(0, args.batch_size, args.minibatch_size), b_inds):
-                end = start + args.minibatch_size
+            for b in b_inds:
 
                 container_local = container_flat[b]
 
