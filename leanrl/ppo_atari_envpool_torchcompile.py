@@ -324,8 +324,7 @@ if __name__ == "__main__":
 
     ####### Executables #######
     # Define networks: wrapping the policy in a TensorDictModule allows us to use CudaGraphCompiledModule
-    policy = TensorDictModule(agent_inference.get_action_and_value, in_keys=["obs"],
-                              out_keys=["action", "log_prob", "entropy", "value"])
+    policy = agent_inference.get_action_and_value
     get_value = agent_inference.get_value
 
     # Compile policy
