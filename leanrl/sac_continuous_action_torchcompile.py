@@ -15,11 +15,10 @@ import torch.optim as optim
 import tqdm
 import tyro
 import wandb
+from tensordict import from_modules, TensorDict, from_module
 from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 # from stable_baselines3.common.buffers import ReplayBuffer
 from torchrl.data import ReplayBuffer, LazyTensorStorage
-from tensordict import from_modules, TensorDict, from_module
-import tensordict
 
 wandb.init(project="sac_continuous", name=os.path.basename(__file__))
 

@@ -11,9 +11,6 @@ import torch.nn as nn
 import torch.optim as optim
 import tyro
 import wandb
-from torch.distributions.categorical import Categorical
-from torch.utils.tensorboard import SummaryWriter
-
 from stable_baselines3.common.atari_wrappers import (  # isort:skip
     ClipRewardEnv,
     EpisodicLifeEnv,
@@ -21,6 +18,7 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
     MaxAndSkipEnv,
     NoopResetEnv,
 )
+from torch.distributions.categorical import Categorical
 
 wandb.init(project="ppo_atari", name=os.path.basename(__file__))
 

@@ -14,9 +14,9 @@ import numpy as np
 import optax
 import tqdm
 import tyro
+import wandb
 from flax.training.train_state import TrainState
 from stable_baselines3.common.buffers import ReplayBuffer
-import wandb
 
 wandb.init(project="td3_continuous", name=os.path.basename(__file__))
 

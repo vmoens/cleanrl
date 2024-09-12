@@ -13,8 +13,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
-from stable_baselines3.common.buffers import ReplayBuffer
 import wandb
+from stable_baselines3.common.buffers import ReplayBuffer
 
 wandb.init(project="td3_continuous", name=os.path.basename(__file__))
 

@@ -15,8 +15,8 @@ import tqdm
 import tyro
 from tensordict import from_module, TensorDict
 from tensordict.nn import CudaGraphCompiledModule
-from torchrl.data import ReplayBuffer, LazyTensorStorage, ListStorage
-import tensordict
+from torchrl.data import ReplayBuffer, LazyTensorStorage
+
 
 @dataclass
 class Args:
