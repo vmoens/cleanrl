@@ -227,7 +227,7 @@ if __name__ == "__main__":
 
         qf_loss.backward()
         q_optimizer.step()
-        return TensorDict(qf_loss=qf_loss)
+        return TensorDict(qf_loss=qf_loss.detach())
 
     def update_pol(data):
         actor_optimizer.zero_grad()
@@ -247,8 +247,7 @@ if __name__ == "__main__":
 
             alpha_loss.backward()
             a_optimizer.step()
-            return TensorDict(alpha=alpha, actor_loss=actor_loss, alpha_loss=alpha_loss)
-        return TensorDict(alpha=alpha, actor_loss=actor_loss)
+        return TensorDict(alpha=alpha.detach(), actor_loss=actor_loss.detach(), alpha_loss=alpha_loss.detach())
 
     def extend_and_sample(transition):
         rb.extend(transition)
