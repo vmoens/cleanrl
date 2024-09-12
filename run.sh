@@ -5,14 +5,14 @@ scripts=(
 #    dqn_jax.py
 #    dqn_torchcompile.py
 #    ppo_atari.py
-    ppo_atari_envpool.py
-    ppo_atari_envpool_torchcompile.py
-    ppo_atari_envpool_xla_jax.py
-    sac_continuous_action.py
-    sac_continuous_action_torchcompile.py
-    td3_continuous_action.py
-    td3_continuous_action_jax.py
-    td3_continuous_action_torchcompile.py
+    leanrl/ppo_atari_envpool.py
+    leanrl/ppo_atari_envpool_torchcompile.py
+    leanrl/ppo_atari_envpool_xla_jax.py
+    leanrl/sac_continuous_action.py
+    leanrl/sac_continuous_action_torchcompile.py
+    leanrl/td3_continuous_action.py
+    leanrl/td3_continuous_action_jax.py
+    leanrl/td3_continuous_action_torchcompile.py
 )
 for seed in 1 2 3; do
     for script in "${scripts[@]}"; do
