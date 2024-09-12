@@ -24,8 +24,6 @@ from torch.distributions.categorical import Categorical, Distribution
 Distribution.set_default_validate_args(False)
 torch.set_float32_matmul_precision('high')
 
-wandb.init(project="ppo_atari", name=os.path.basename(__file__))
-
 
 @dataclass
 class Args:
@@ -275,11 +273,14 @@ update = tensordict.nn.TensorDictModule(
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+
     batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = batch_size // args.num_minibatches
     args.batch_size = args.num_minibatches * args.minibatch_size
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.compile}__{args.cudagraphs}__{int(time.time())}"
+
+    wandb.init(project="ppo_atari", name=f"{os.path.splitext(os.path.basename(__file__))[0]}-{run_name}")
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)

@@ -18,8 +18,6 @@ import wandb
 from flax.training.train_state import TrainState
 from stable_baselines3.common.buffers import ReplayBuffer
 
-wandb.init(project="td3_continuous", name=os.path.basename(__file__))
-
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -122,6 +120,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         )
     args = tyro.cli(Args)
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+
+    wandb.init(project="td3_continuous", name=f"{os.path.splitext(os.path.basename(__file__))[0]}-{run_name}")
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)

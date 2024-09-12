@@ -20,8 +20,6 @@ from stable_baselines3.common.atari_wrappers import (  # isort:skip
 )
 from torch.distributions.categorical import Categorical
 
-wandb.init(project="ppo_atari", name=os.path.basename(__file__))
-
 @dataclass
 class Args:
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -139,10 +137,13 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+
+    wandb.init(project="ppo_atari", name=f"{os.path.splitext(os.path.basename(__file__))[0]}-{run_name}")
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)

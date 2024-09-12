@@ -25,8 +25,6 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.6"
 os.environ["TF_XLA_FLAGS"] = "--xla_gpu_autotune_level=2 --xla_gpu_deterministic_reductions"
 os.environ["TF_CUDNN DETERMINISTIC"] = "1"
 
-wandb.init(project="ppo_atari", name=os.path.basename(__file__))
-
 
 @dataclass
 class Args:
@@ -169,10 +167,13 @@ class EpisodeStatistics:
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
+
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+
+    wandb.init(project="ppo_atari", name=f"{os.path.splitext(os.path.basename(__file__))[0]}-{run_name}")
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)

@@ -19,7 +19,6 @@ from tensordict import TensorDict, from_module, from_modules
 from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 
-wandb.init(project="td3_continuous", name=os.path.basename(__file__))
 
 @dataclass
 class Args:
@@ -129,7 +128,9 @@ class Actor(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{args.compile}__{args.cudagraphs}__{int(time.time())}"
+
+    wandb.init(project="td3_continuous", name=f"{os.path.splitext(os.path.basename(__file__))[0]}-{run_name}")
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
