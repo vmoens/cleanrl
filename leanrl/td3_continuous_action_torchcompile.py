@@ -3,6 +3,7 @@ import math
 import os
 import random
 import time
+from collections import deque
 from dataclasses import dataclass
 
 import gymnasium as gym
@@ -13,10 +14,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tqdm
 import tyro
+import wandb
 from tensordict.nn import TensorDictModule, CudaGraphCompiledModule
 from torchrl.data import ReplayBuffer, LazyTensorStorage
 from tensordict import TensorDict, from_module, from_modules
 import tensordict
+
+wandb.init(project="td3_continuous", name=os.path.basename(__file__))
 
 @dataclass
 class Args:
@@ -205,6 +209,7 @@ if __name__ == "__main__":
         q_optimizer.zero_grad()
         qf_loss.backward()
         q_optimizer.step()
+        return TensorDict(qf_loss=qf_loss)
 
     def update_pol(data):
         actor_optimizer.zero_grad()
@@ -213,6 +218,7 @@ if __name__ == "__main__":
 
         actor_loss.backward()
         actor_optimizer.step()
+        return TensorDict(actor_loss=actor_loss)
 
 
     def extend_and_sample(transition):
@@ -235,11 +241,14 @@ if __name__ == "__main__":
     pbar = tqdm.tqdm(range(args.total_timesteps))
     start_time = None
     max_ep_ret = -float("inf")
+    avg_returns = deque(maxlen=20)
+    desc = ""
 
     for global_step in pbar:
         if global_step == args.measure_burnin + args.learning_starts:
             start_time = time.time()
             measure_burnin = global_step
+
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
             actions = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
@@ -251,6 +260,15 @@ if __name__ == "__main__":
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
+        # TRY NOT TO MODIFY: record rewards for plotting purposes
+        if "final_info" in infos:
+            for info in infos["final_info"]:
+                r = float(info['episode']['r'])
+                max_ep_ret = max(max_ep_ret, r)
+                avg_returns.append(r)
+            desc = f"global_step={global_step}, episodic_return={torch.tensor(avg_returns).mean(): 4.2f} (max={max_ep_ret: 4.2f})"
+
+        # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         next_obs = torch.as_tensor(next_obs, device=device, dtype=torch.float)
         real_next_obs = next_obs.clone()
         for idx, trunc in enumerate(truncations):
@@ -272,28 +290,29 @@ if __name__ == "__main__":
         obs = next_obs
         data = extend_and_sample(transition)
 
-        # TRY NOT TO MODIFY: record rewards for plotting purposes
-        if "final_info" in infos:
-            for info in infos["final_info"]:
-                r = float(info['episode']['r'][0])
-                max_ep_ret = max(max_ep_ret, r)
-                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
-                break
-
         # ALGO LOGIC: training.
         if global_step > args.learning_starts:
             # TODO: assess this
-            update_main(data)
+            out_main = update_main(data)
             if global_step % args.policy_frequency == 0:
-                update_pol(data)
+                out_main.update(update_pol(data))
 
                 # update the target networks
                 # lerp is defined as x' = x + w (y-x), which is equivalent to x' = (1-w) x + w y
                 qnet_target_params.lerp_(qnet_params.data, args.tau)
                 target_actor_params.lerp_(actor_params.data, args.tau)
 
-            if global_step % 100 == 0:
-                if start_time is not None:
-                    pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, "+desc)
+            if global_step % 100 == 0 and start_time is not None:
+                speed = (global_step - measure_burnin) / (time.time() - start_time)
+                pbar.set_description(f"{speed: 4.4f} sps, " + desc)
+                with torch.no_grad():
+                    logs = {"episode_return": torch.tensor(avg_returns).mean(),
+                            "actor_loss": out_main["actor_loss"].mean(),
+                            "qf_loss": out_main["qf_loss"].mean(),
+                            }
+                wandb.log({
+                    "speed": speed,
+                    **logs,
+                }, step=global_step)
 
     envs.close()

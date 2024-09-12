@@ -2,6 +2,7 @@
 import os
 import random
 import time
+from collections import deque
 from dataclasses import dataclass
 
 import gymnasium as gym
@@ -13,7 +14,9 @@ import torch.optim as optim
 import tqdm
 import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
+import wandb
 
+wandb.init(project="td3_continuous", name=os.path.basename(__file__))
 
 @dataclass
 class Args:
@@ -163,6 +166,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     pbar = tqdm.tqdm(range(args.total_timesteps))
     start_time = None
     max_ep_ret = -float("inf")
+    avg_returns = deque(maxlen=20)
+    desc = ""
     for global_step in pbar:
         if global_step == args.measure_burnin + args.learning_starts:
             start_time = time.time()
@@ -183,10 +188,10 @@ poetry run pip install "stable_baselines3==2.0.0a1"
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                r = float(info['episode']['r'][0])
+                r = float(info['episode']['r'])
                 max_ep_ret = max(max_ep_ret, r)
-                desc  = f"global_step={global_step}, episodic_return={r: 4.2f} (max={max_ep_ret: 4.2f})"
-                break
+                avg_returns.append(r)
+            desc = f"global_step={global_step}, episodic_return={torch.tensor(avg_returns).mean(): 4.2f} (max={max_ep_ret: 4.2f})"
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
@@ -240,6 +245,16 @@ poetry run pip install "stable_baselines3==2.0.0a1"
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
             if global_step % 100 == 0 and start_time is not None:
-                pbar.set_description(f"{(global_step - measure_burnin) / (time.time() - start_time): 4.4f} sps, " + desc)
+                speed = (global_step - measure_burnin) / (time.time() - start_time)
+                pbar.set_description(f"{speed: 4.4f} sps, " + desc)
+                with torch.no_grad():
+                    logs = {"episode_return": torch.tensor(avg_returns).mean(),
+                            "actor_loss": actor_loss.mean(),
+                            "qf_loss": qf_loss.mean(),
+                            }
+                wandb.log({
+                    "speed": speed,
+                    **logs,
+                }, step=global_step)
 
     envs.close()
